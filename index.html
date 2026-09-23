@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thai Dividend Stock Finder</title>
+<style>
+  :root {
+    --bg: #12161D;
+    --panel: #181D26;
+    --panel-2: #1F2530;
+    --raised: #262D3A;
+    --line: #2C3342;
+    --line-soft: #232936;
+    --ink: #E9E6DC;
+    --ink-soft: #8B93A6;
+    --ink-faint: #5C6577;
+    --gold: #CB9C4F;
+    --gold-soft: rgba(203,156,79,.14);
+    --gold-line: rgba(203,156,79,.4);
+    --teal: #4EA894;
+    --teal-soft: rgba(78,168,148,.14);
+    --red: #CB6B62;
+    --red-soft: rgba(203,107,98,.14);
+    --radius: 6px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace;
+    --serif: Georgia, "Noto Serif Thai", "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 110px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  a { color: var(--gold); }
+  button { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+
+  /* ===== Top bar ===== */
+  header.topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(18,22,29,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner { max-width: 1040px; margin: 0 auto; padding: 14px 22px; display:flex; align-items:center; gap:20px; }
+  .brand { display:flex; flex-direction:column; gap:1px; margin-right: auto; }
+  .brand-name { font-family: var(--serif); font-size: 1.15rem; color: var(--ink); line-height:1.1; }
+  .brand-tag { font-size: .68rem; color: var(--ink-faint); letter-spacing: .02em; }
+  nav.tabs { display:flex; gap:2px; background: var(--panel-2); border:1px solid var(--line); border-radius: var(--radius); padding: 3px; }
+  nav.tabs button { padding: 7px 16px; border:none; background:transparent; color:var(--ink-soft); font-size:.85rem; border-radius: 4px; cursor:pointer; transition: background .15s ease, color .15s ease; }
+  nav.tabs button.active { background: var(--gold); color:#221804; font-weight:600; }
+  nav.tabs button:not(.active):hover { color: var(--ink); background: var(--raised); }
+  .settings-btn { display:flex; align-items:center; gap:7px; padding:8px 12px; border:1px solid var(--line); background:var(--panel-2); color:var(--ink-soft); border-radius: var(--radius); cursor:pointer; font-size:.82rem; transition: border-color .15s ease, color .15s ease; }
+  .settings-btn:hover { border-color: var(--gold-line); color: var(--ink); }
+  .settings-btn .dot { width:7px; height:7px; border-radius:50%; background: var(--ink-faint); }
+  .settings-btn .dot.ok { background: var(--teal); }
+  .settings-btn .dot.warn { background: var(--gold); }
+
+  /* ===== Settings drawer ===== */
+  .drawer-backdrop { position:fixed; inset:0; background:rgba(8,10,14,.55); z-index:49; opacity:0; pointer-events:none; transition: opacity .18s ease; }
+  .drawer-backdrop.open { opacity:1; pointer-events:auto; }
+  .drawer { position:fixed; top:0; right:0; height:100%; width:min(420px, 92vw); background:var(--panel); border-left:1px solid var(--line); z-index:50; transform: translateX(100%); transition: transform .22s ease; overflow-y:auto; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line); }
+  .drawer-head h3 { margin:0; font-family: var(--serif); font-weight:400; font-size:1.05rem; }
+  .drawer-close { background:none; border:none; color:var(--ink-soft); font-size:1.3rem; line-height:1; cursor:pointer; padding:4px 8px; border-radius:4px; }
+  .drawer-close:hover { color:var(--ink); background:var(--raised); }
+  .drawer-body { padding:20px; display:grid; gap:18px; }
+  .drawer-section p { margin:0 0 10px; font-size:.83rem; line-height:1.6; color:var(--ink-soft); }
+  .drawer-section h4 { margin:0 0 6px; font-size:.86rem; color:var(--ink); font-weight:600; }
+  .field-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .field-row input[type=text] { flex:1 1 180px; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:var(--panel-2); color:var(--ink); font-size:.86rem; }
+  .field-row input[type=text]:focus { border-color: var(--gold-line); }
+  .btn { padding:9px 14px; border:1px solid var(--line); border-radius:4px; background:var(--raised); color:var(--ink); font-size:.83rem; font-weight:600; cursor:pointer; transition: border-color .15s ease, background .15s ease; white-space:nowrap; }
+  .btn:hover { border-color: var(--gold-line); }
+  .btn.primary { background: var(--gold); color:#221804; border-color: var(--gold); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .status-line { font-size:.78rem; margin-top:8px; }
+  .status-line.ok { color: var(--teal); }
+  .status-line.warn { color: var(--gold); }
+  .tech-note { font-size:.76rem; line-height:1.6; color:var(--ink-faint); border-top:1px solid var(--line); padding-top:14px; }
+  .tech-note code { background:var(--panel-2); padding:1px 5px; border-radius:3px; color:var(--gold); }
+
+  /* ===== Toolbar ===== */
+  .toolbar-wrap { position: sticky; top: 61px; z-index: 30; background: var(--bg); border-bottom:1px solid var(--line-soft); }
+  .toolbar { max-width:1040px; margin:0 auto; padding:12px 22px; display:flex; flex-wrap:wrap; gap:9px; align-items:center; }
+  .search-field { flex:1 1 220px; position:relative; }
+  .search-field input { width:100%; padding:9px 12px 9px 34px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); color:var(--ink); font-size:.9rem; }
+  .search-field input:focus { border-color: var(--gold-line); }
+  .search-field svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--ink-faint); pointer-events:none; }
+  select.ctrl { padding:9px 10px; border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); color:var(--ink-soft); font-size:.83rem; }
+  .result-count { font-size:.78rem; color:var(--ink-faint); white-space:nowrap; margin-left:auto; }
+  .search-suggestions { max-width:1040px; margin:0 auto; padding:0 22px 12px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .sugg-label { width:100%; font-size:.75rem; color:var(--ink-faint); margin-bottom:2px; }
+  .sugg-item { padding:5px 10px; border:1px solid var(--teal); background:var(--teal-soft); color:var(--teal); border-radius:3px; font-size:.78rem; cursor:pointer; }
+  .sugg-item:hover { background:var(--teal); color:#0B1611; }
+
+  main { max-width:1040px; margin:0 auto; padding:22px; }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  section.card { background:var(--panel); border:1px solid var(--line); border-radius: var(--radius); }
+  h2.section-title { font-family: var(--serif); font-weight:400; font-size:1.1rem; margin:0; padding:16px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .section-hint { font-size:.75rem; color:var(--ink-faint); font-weight:400; }
+
+  .stock-row { border-bottom:1px solid var(--line-soft); }
+  .stock-row:last-child { border-bottom:none; }
+  .stock-row-head { display:grid; grid-template-columns:1fr auto auto auto auto; align-items:center; gap:16px; padding:13px 20px; cursor:pointer; transition: background .12s ease; }
+  .stock-row-head:hover { background: var(--panel-2); }
+  .stock-ticker { font-weight:700; font-size:.98rem; letter-spacing:.01em; }
+  .stock-market { display:inline-block; font-size:.62rem; padding:1px 6px; border-radius:2px; background:var(--gold-soft); color:var(--gold); margin-left:8px; vertical-align:middle; font-family: var(--sans); }
+  .stock-name { font-size:.78rem; color:var(--ink-faint); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .metric { text-align:right; min-width:76px; }
+  .metric-label { font-size:.64rem; color:var(--ink-faint); margin-bottom:2px; font-family: var(--sans); }
+  .metric-value { font-size:.92rem; font-weight:600; }
+  .metric-value.stale { color:var(--ink-soft); font-weight:500; }
+  .metric-value.insufficient { font-size:.64rem; font-weight:500; color:var(--ink-faint); line-height:1.25; cursor:help; }
+  .metric-label .basis-tag { opacity:.6; font-weight:400; }
+  .basis-note { font-size:.72rem; color:var(--ink-faint); line-height:1.7; margin:0 0 12px; font-family:var(--sans); }
+  .basis-note strong { color:var(--ink-soft); font-weight:600; }
+  .yield-value { color:var(--teal); }
+  .streak-badge { display:inline-flex; align-items:center; gap:4px; font-size:.65rem; background:var(--teal-soft); color:var(--teal); border:1px solid var(--teal); padding:2px 7px; border-radius:2px; white-space:nowrap; font-family: var(--sans); }
+  .chevron { color:var(--ink-faint); transition:transform .16s ease; }
+
+  /* ===== Data-source badges ===== */
+  .src-badge { display:inline-flex; align-items:center; gap:3px; font-size:.6rem; font-weight:700; letter-spacing:.03em; padding:1px 6px; border-radius:2px; font-family: var(--sans); cursor:help; white-space:nowrap; vertical-align:middle; }
+  .src-badge::before { content:""; width:5px; height:5px; border-radius:50%; display:inline-block; }
+  .src-badge.src-live { background: var(--teal-soft); color: var(--teal); border:1px solid var(--teal); }
+  .src-badge.src-live::before { background: var(--teal); }
+  .src-badge.src-fallback { background: var(--gold-soft); color: var(--gold); border:1px solid var(--gold-line); }
+  .src-badge.src-fallback::before { background: var(--gold); }
+  .src-badge.src-seed { background: var(--red-soft); color: var(--red); border:1px solid var(--red); }
+  .src-badge.src-seed::before { background: var(--red); }
+  .src-badge.src-none { background: var(--panel-2); color: var(--ink-faint); border:1px solid var(--line); }
+  .src-badge.src-none::before { background: var(--ink-faint); }
+  .metric-label .src-badge { margin-left:5px; transform: translateY(-1px); }
+  .data-warning { display:flex; gap:8px; align-items:flex-start; background: var(--red-soft); border:1px solid var(--red); color:var(--ink); border-radius:4px; padding:9px 12px; font-size:.78rem; line-height:1.5; margin:0 0 12px; }
+  .data-warning strong { color: var(--red); }
+  .history-table td.src-cell { text-align:left; }
+  .stock-row.open .chevron { transform:rotate(90deg); }
+
+  .stock-detail { display:none; padding:2px 20px 18px; background:var(--panel-2); border-top:1px dashed var(--line); }
+  .stock-row.open .stock-detail { display:block; }
+  .price-line { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:14px 0 6px; font-size:.83rem; }
+  .price-line button { padding:7px 12px; border:1px solid var(--teal); background:transparent; color:var(--teal); border-radius:4px; font-size:.79rem; cursor:pointer; transition: background .15s ease, color .15s ease; }
+  .price-line button:hover { background:var(--teal); color:#0B1611; }
+  .price-line .fetch-msg { color:var(--ink-faint); font-size:.76rem; }
+
+  .history-table { border-collapse:collapse; font-size:.82rem; width:100%; margin-top:8px; }
+  .history-table caption { text-align:left; font-size:.76rem; color:var(--ink-faint); margin-bottom:6px; display:flex; justify-content:space-between; font-family: var(--sans); }
+  .history-table th, .history-table td { padding:5px 8px; text-align:right; border-bottom:1px solid var(--line-soft); }
+  .history-table th:first-child, .history-table td:first-child { text-align:left; }
+  .history-table th { color:var(--ink-faint); font-weight:500; font-size:.7rem; font-family: var(--sans); }
+  .history-table input { width:100%; padding:4px 5px; border:1px solid var(--line); border-radius:3px; background:var(--panel); color:var(--ink); font-size:.8rem; text-align:right; font-family: var(--mono); }
+  .history-table input:focus { border-color: var(--gold-line); }
+  .history-table input.input-error { border-color: var(--red); background: var(--red-soft); }
+  .field-error { text-align:left; font-size:.66rem; color:var(--red); margin-top:3px; line-height:1.3; }
+  .row-del { color:var(--red); cursor:pointer; background:none; border:none; font-size:.88rem; }
+  .table-actions { display:flex; gap:9px; margin-top:10px; }
+  .table-actions button { padding:6px 11px; border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); border-radius:4px; font-size:.76rem; cursor:pointer; }
+  .table-actions button:hover { border-color: var(--gold-line); color: var(--ink); }
+  .save-flag { font-size:.7rem; color:var(--teal); font-family: var(--sans); }
+
+  .use-btn { margin-top:14px; padding:9px 16px; background:var(--gold); color:#221804; border:none; border-radius:4px; font-size:.83rem; font-weight:600; cursor:pointer; }
+  .use-btn:hover { filter: brightness(1.08); }
+
+  .calc-body { padding:20px; display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  @media (max-width:640px) {
+    .calc-body { grid-template-columns:1fr; }
+    .stock-row-head { grid-template-columns:1fr auto; row-gap:8px; }
+    .metric.hide-mobile { display:none; }
+    .brand-tag { display:none; }
+    .topbar-inner { gap:10px; }
+  }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:.8rem; color:var(--ink-soft); margin-bottom:5px; }
+  .field select, .field input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:4px; background:var(--panel-2); color:var(--ink); font-size:.92rem; }
+  .field select:focus, .field input:focus { border-color: var(--gold-line); }
+  .mode-toggle { display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:14px; width:fit-content; }
+  .mode-toggle button { padding:7px 14px; border:none; background:var(--panel-2); color:var(--ink-soft); cursor:pointer; font-size:.82rem; }
+  .mode-toggle button.active { background: var(--gold); color:#221804; font-weight:600; }
+  .result-panel { background:var(--raised); border:1px solid var(--line); border-radius: var(--radius); padding:20px; }
+  .result-line { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:.86rem; }
+  .result-line:last-child { border-bottom:none; }
+  .result-line .lbl { color:var(--ink-soft); font-family: var(--sans); }
+  .result-line .val { font-weight:600; }
+  .result-line.highlight { padding-top:14px; margin-top:6px; border-top:1px solid var(--line); border-bottom:none; }
+  .result-line.highlight .val { color:var(--gold); font-size:1.08rem; }
+  .tax-note { font-size:.74rem; color:var(--ink-faint); margin-top:12px; line-height:1.5; font-family: var(--sans); }
+
+  footer { max-width:1040px; margin:0 auto; padding:6px 22px 50px; color:var(--ink-faint); font-size:.76rem; line-height:1.6; }
+  footer a { color: var(--ink-soft); }
+  .empty-state { padding:40px 20px; text-align:center; color:var(--ink-faint); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-name">Thai Dividend Stock Finder</span>
+      <span class="brand-tag">SET · mai — ราคาจริงจาก EODHD</span>
+    </div>
+    <nav class="tabs" id="navTabs" role="tablist" aria-label="เมนูหลัก">
+      <button type="button" data-tab="stocks" class="active" role="tab" aria-selected="true">รายชื่อหุ้น</button>
+      <button type="button" data-tab="calculator" role="tab" aria-selected="false">เครื่องคำนวณ</button>
+    </nav>
+    <button type="button" class="settings-btn" id="settingsToggle">
+      <span class="dot" id="settingsDot"></span> ตั้งค่า API
+    </button>
+  </div>
+</header>
+
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<aside class="drawer" id="settingsDrawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h3>เชื่อมต่อ API ราคาจริง</h3>
+    <button type="button" class="drawer-close" id="drawerClose" aria-label="ปิด">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-section">
+      <p>
+        แอปนี้ดึง "ราคาปิดล่าสุด" จริงจาก <strong>EODHD</strong> ผ่าน proxy กลาง (แผนฟรี: 20 คำขอ/วัน, ไม่ใช่ราคาเรียลไทม์)
+        <strong>API key ของ EODHD ถูกเก็บเป็นความลับไว้ที่ฝั่งเซิร์ฟเวอร์ของ proxy เท่านั้น</strong> — แอปหน้าบ้าน (ไฟล์นี้) ไม่ต้องขอ ไม่เก็บ
+        และไม่ส่งคีย์ใดๆ ออกจากเบราว์เซอร์ของคุณเลย จึงไม่มีความเสี่ยงที่คีย์จะรั่วไหลผ่านหน้าเว็บที่เผยแพร่ต่อสาธารณะ
+      </p>
+      <div id="keyStatus" class="status-line ok">เชื่อมต่อผ่าน proxy แล้ว — พร้อมดึงราคาจริง</div>
+    </div>
+    <div class="drawer-section">
+      <h4>รายชื่อหุ้นทั้งตลาด</h4>
+      <p>โหลดครั้งเดียวพอ (เก็บไว้ในเครื่อง) หลังโหลด พิมพ์ค้นหาชื่อหุ้นที่ยังไม่อยู่ในรายการได้เลย</p>
+      <button id="loadSymbolsBtn" class="btn" type="button">โหลดรายชื่อหุ้นทั้งหมดของตลาด BK (ใช้ 1 คำขอ)</button>
+      <div id="symbolsStatus" class="status-line"></div>
+    </div>
+    <p class="tech-note">
+      <strong>หมายเหตุ:</strong> ไม่มี API ฟรีเจ้าไหนให้ "ประวัติปันผล" ของหุ้นไทยแบบละเอียด — ตารางปันผลในรายการหุ้นเป็นข้อมูลตั้งต้นที่ <u>แก้ไขได้เอง</u> ระบบจะจำค่าไว้ในเครื่องอัตโนมัติ<br><br>
+      คำขอทั้งหมดไปยัง EODHD วิ่งผ่าน proxy ที่กำหนดใน <code>EODHD_BASE</code> เท่านั้น proxy จะตรวจสอบปลายทางกับ whitelist ก่อนส่งต่อทุกครั้ง (ดู <code>proxy-worker.js</code>)
+    </p>
+  </div>
+</aside>
+
+<div class="toolbar-wrap" id="toolbarWrap">
+  <div class="toolbar">
+    <div class="search-field">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" type="text" placeholder="ค้นหาชื่อหุ้นหรือ ticker เช่น PTT, AOT, KBANK">
+    </div>
+    <select id="minYield" class="ctrl">
+      <option value="0">ทุก Dividend Yield</option>
+      <option value="3">≥ 3%</option>
+      <option value="5">≥ 5%</option>
+      <option value="7">≥ 7%</option>
+    </select>
+    <select id="marketFilter" class="ctrl">
+      <option value="all">ทุกตลาด</option>
+      <option value="SET">SET</option>
+      <option value="mai">mai</option>
+    </select>
+    <select id="sortBy" class="ctrl">
+      <option value="yield-desc">Yield: สูง → ต่ำ</option>
+      <option value="yield-asc">Yield: ต่ำ → สูง</option>
+      <option value="growth-desc">Dividend Growth: สูง → ต่ำ</option>
+      <option value="ticker-asc">ชื่อ Ticker (A-Z)</option>
+    </select>
+    <select id="yieldBasis" class="ctrl" title="เลือกฐานการคำนวณ Dividend Yield">
+      <option value="latest">Yield จาก: DPS ล่าสุด</option>
+      <option value="ttm">Yield จาก: TTM (ย้อนหลัง 12 เดือน)</option>
+      <option value="avg">Yield จาก: ค่าเฉลี่ยปันผลย้อนหลัง</option>
+    </select>
+    <select id="growthYears" class="ctrl" title="จำนวนปีย้อนหลังที่ใช้คำนวณ Dividend Growth">
+      <option value="all">Growth ช่วง: ทั้งหมดที่มี</option>
+      <option value="3">Growth ช่วง: 3 ปีล่าสุด</option>
+      <option value="5">Growth ช่วง: 5 ปีล่าสุด</option>
+      <option value="10">Growth ช่วง: 10 ปีล่าสุด</option>
+    </select>
+    <span class="result-count" id="resultCount"></span>
+  </div>
+  <div id="searchSuggestions" class="search-suggestions" style="display:none;"></div>
+</div>
+
+<main>
+  <div class="view active" id="viewStocks">
+    <section class="card" id="stockListSection">
+      <h2 class="section-title">รายชื่อหุ้น <span class="section-hint">คลิกที่แถวเพื่อดู/แก้ไขประวัติปันผล และดึงราคาจริง</span></h2>
+      <div id="stockList"></div>
+      <div class="empty-state" id="emptyState" style="display:none;">ไม่พบหุ้นที่ตรงกับเงื่อนไขการค้นหา</div>
+    </section>
+  </div>
+
+  <div class="view" id="viewCalculator">
+    <section class="card" id="calculator">
+      <h2 class="section-title">เครื่องคำนวณเงินปันผล <span class="section-hint">คำนวณจากเงินปันผลต่อหุ้นล่าสุดในตารางของแต่ละหุ้น</span></h2>
+      <div class="calc-body">
+        <div>
+          <div class="field">
+            <label for="calcStock">เลือกหุ้น</label>
+            <select id="calcStock"></select>
+          </div>
+          <div class="mode-toggle" id="modeToggle">
+            <button type="button" data-mode="shares" class="active">กรอกจำนวนหุ้น</button>
+            <button type="button" data-mode="cash">กรอกเงินลงทุน</button>
+          </div>
+          <div class="field" id="sharesField">
+            <label for="sharesInput">จำนวนหุ้น (หุ้น)</label>
+            <input id="sharesInput" type="number" min="0" step="100" value="1000">
+          </div>
+          <div class="field" id="cashField" style="display:none;">
+            <label for="cashInput">เงินลงทุน (บาท)</label>
+            <input id="cashInput" type="number" min="0" step="1000" value="100000">
+          </div>
+        </div>
+        <div class="result-panel">
+          <div class="result-line"><span class="lbl">ราคาหุ้นที่ใช้คำนวณ</span><span class="val num" id="resPrice">–</span></div>
+          <div class="result-line"><span class="lbl">จำนวนหุ้นที่ถืออยู่ / ซื้อได้</span><span class="val num" id="resShares">–</span></div>
+          <div class="result-line" id="resInvestedRow" style="display:none;"><span class="lbl">เงินลงทุนจริง (ปัดเศษหุ้นลง)</span><span class="val num" id="resInvested">–</span></div>
+          <div class="result-line" id="resRemainingRow" style="display:none;"><span class="lbl">เงินสดคงเหลือ</span><span class="val num" id="resRemaining">–</span></div>
+          <div class="result-line"><span class="lbl">เงินปันผลต่อหุ้นล่าสุด</span><span class="val num" id="resDps">–</span></div>
+          <div class="result-line"><span class="lbl">เงินปันผลรวมก่อนหักภาษี</span><span class="val num" id="resGross">–</span></div>
+          <div class="result-line"><span class="lbl">หักภาษี ณ ที่จ่าย 10%</span><span class="val num" id="resTax">–</span></div>
+          <div class="result-line highlight"><span class="lbl">เงินปันผลรับสุทธิ (หลังหักภาษี)</span><span class="val num" id="resNet">–</span></div>
+          <div class="result-line highlight"><span class="lbl">Dividend Yield ส่วนตัว (หลังภาษี)</span><span class="val num" id="resPersonalYield">–</span></div>
+          <div class="tax-note">ตามประมวลรัษฎากร เงินปันผลจากหุ้นสามัญที่จ่ายให้ผู้ถือหุ้นบุคคลธรรมดาถูกหักภาษี ณ ที่จ่ายในอัตรา 10% — สูตร: เงินปันผลสุทธิ = เงินปันผลรวม × (1 − 0.10), Yield ส่วนตัว = (เงินปันผลสุทธิ ÷ เงินลงทุน) × 100</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <p><strong>เกี่ยวกับข้อมูล:</strong> ราคาหุ้นดึงจาก EODHD API จริงผ่าน proxy กลาง (แผนฟรีจำกัด 20 คำขอ/วัน เป็นราคาปิดของวันทำการล่าสุด ไม่ใช่ราคาระหว่างวันแบบเรียลไทม์) API key ของ EODHD ถูกเก็บไว้เป็นความลับที่ฝั่งเซิร์ฟเวอร์ของ proxy เท่านั้น ไม่เคยถูกส่งมาหรือเก็บไว้ในเบราว์เซอร์ของคุณ หากเรียก API ไม่สำเร็จ ระบบจะใช้ราคาสำรองแทนและระบุไว้ชัดเจนด้วยป้าย <span class="src-badge src-fallback" style="cursor:default;">FALLBACK</span><br>
+  ประวัติเงินปันผลเป็น<strong>ตารางที่แก้ไขได้เอง</strong> — แถวที่ยังไม่ได้แก้จะมีป้าย <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> กำกับไว้เพราะเป็นข้อมูลตัวอย่าง ไม่ใช่ข้อมูลจริง กดที่ตัวเลขในตารางเพื่อแก้เป็นค่าจริงที่คุณเช็คมา (แถวจะเปลี่ยนเป็น "ยืนยันแล้ว") ระบบบันทึกอัตโนมัติในเบราว์เซอร์ของคุณ (localStorage) ไม่มีการส่งข้อมูลนี้ไปที่ใด</p>
+  <p style="margin-top:8px;"><strong>ความหมายของป้ายกำกับ:</strong>
+    <span class="src-badge src-live" style="cursor:default;">LIVE</span> = ราคาจริงจาก API &nbsp;·&nbsp;
+    <span class="src-badge src-fallback" style="cursor:default;">FALLBACK</span> = ราคาสำรอง ไม่ใช่ราคาจริง &nbsp;·&nbsp;
+    <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> = ข้อมูลตัวอย่าง ยังไม่ได้ตรวจสอบ
+  </p>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // เรียก EODHD ผ่าน proxy ตัวกลางเสมอ (ดู proxy-worker.js ที่แนบมาด้วย)
+  // API key ของ EODHD ถูกเก็บเป็น secret ฝั่งเซิร์ฟเวอร์ใน proxy เท่านั้น
+  // ไฟล์นี้และเบราว์เซอร์ของผู้ใช้ "ไม่มีสิทธิ์เข้าถึงคีย์" เลย จึงไม่มีคีย์ใดๆ ให้รั่วไหลผ่าน HTML/JS ที่เผยแพร่
+  const EODHD_BASE = "https://tdf-proxy.nattapatk.workers.dev";
+  if (!/^https:\/\//i.test(EODHD_BASE)) {
+    throw new Error("EODHD_BASE ต้องเป็น URL แบบ https เท่านั้น");
+  }
+
+  const LS_DIV_KEY = "tdf_dividends_v1";
+  const LS_PRICE_KEY = "tdf_prices_v1";
+  const LS_CALLCOUNT_KEY = "tdf_callcount_v1";
+  const LS_CUSTOM_KEY = "tdf_customstocks_v1";
+  const LS_SYMBOLS_KEY = "tdf_symbollist_v1";
+
+  // อนุญาตเฉพาะรูปแบบ ticker ตลาดหุ้นไทยทั่วไป (ตัวอักษร/ตัวเลขล้วน ไม่เกิน 10 ตัว)
+  // ใช้คุมทั้งค่าที่พิมพ์เอง และค่าที่มาจาก symbol list ของ API ก่อนนำไปต่อเป็น URL หรือ selector
+  const TICKER_RE = /^[A-Z0-9]{1,10}$/;
+
+  // หนีอักขระพิเศษของ HTML ก่อนแทรกค่าที่มาจาก API หรือผู้ใช้ลงใน template — ป้องกัน XSS
+  // ใช้ได้ทั้งกับข้อความปกติและค่าที่อยู่ใน attribute (เพราะ escape " และ ' ด้วย)
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[ch]));
+  }
+
+  /* ============ 0. Perf helper ============ */
+  function debounce(fn, wait) {
+    let t;
+    return function (...args) {
+      clearTimeout(t);
+      t = setTimeout(() => fn.apply(this, args), wait);
+    };
+  }
+
+  /* ============ 1. Base stock list (identity + fallback price + seed dividend history) ============ */
+  const RAW_STOCKS = [
+    { ticker:"PTT",    nameTh:"ปตท.",                    market:"SET", sector:"พลังงาน",            fallbackPrice:34.25 },
+    { ticker:"AOT",    nameTh:"ท่าอากาศยานไทย",           market:"SET", sector:"ขนส่ง",              fallbackPrice:62.50 },
+    { ticker:"KBANK",  nameTh:"ธนาคารกสิกรไทย",           market:"SET", sector:"ธนาคาร",             fallbackPrice:145.00 },
+    { ticker:"SCB",    nameTh:"เอสซีบี เอกซ์",            market:"SET", sector:"ธนาคาร",             fallbackPrice:108.50 },
+    { ticker:"ADVANC", nameTh:"แอดวานซ์ อินโฟร์ เซอร์วิส", market:"SET", sector:"ICT",                fallbackPrice:215.00 },
+    { ticker:"CPALL",  nameTh:"ซีพี ออลล์",               market:"SET", sector:"พาณิชย์",            fallbackPrice:58.25 },
+    { ticker:"BBL",    nameTh:"ธนาคารกรุงเทพ",            market:"SET", sector:"ธนาคาร",             fallbackPrice:150.50 },
+    { ticker:"INTUCH", nameTh:"อินทัช โฮลดิ้งส์",          market:"SET", sector:"ICT (โฮลดิ้ง)",       fallbackPrice:78.00 },
+    { ticker:"TOP",    nameTh:"ไทยออยล์",                 market:"SET", sector:"พลังงาน-โรงกลั่น",    fallbackPrice:38.00 },
+    { ticker:"PTTEP",  nameTh:"ปตท.สำรวจและผลิตปิโตรเลียม", market:"SET", sector:"พลังงาน-สำรวจ",     fallbackPrice:135.00 },
+    { ticker:"KTB",    nameTh:"ธนาคารกรุงไทย",            market:"SET", sector:"ธนาคาร",             fallbackPrice:19.20 },
+    { ticker:"SCC",    nameTh:"ปูนซิเมนต์ไทย",            market:"SET", sector:"วัสดุก่อสร้าง",       fallbackPrice:185.00 },
+    { ticker:"BDMS",   nameTh:"กรุงเทพดุสิตเวชการ",        market:"SET", sector:"การแพทย์",           fallbackPrice:24.50 },
+    { ticker:"CPN",    nameTh:"เซ็นทรัลพัฒนา",            market:"SET", sector:"อสังหาริมทรัพย์",     fallbackPrice:54.00 },
+    { ticker:"LH",     nameTh:"แลนด์แอนด์เฮ้าส์",          market:"SET", sector:"อสังหาริมทรัพย์",     fallbackPrice:7.55 },
+    { ticker:"TISCO",  nameTh:"ทิสโก้ไฟแนนเชียลกรุ๊ป",     market:"SET", sector:"ธนาคาร-การเงิน",      fallbackPrice:98.00 },
+    { ticker:"BCP",    nameTh:"บางจาก คอร์ปอเรชั่น",       market:"SET", sector:"พลังงาน-โรงกลั่น",    fallbackPrice:33.75 },
+    { ticker:"JMART",  nameTh:"เจมาร์ท กรุ๊ป โฮลดิ้งส์",    market:"mai", sector:"พาณิชย์-เทคโนโลยี",   fallbackPrice:14.20 }
+  ];
+
+  const CURRENT_YEAR = new Date().getFullYear();
+
+  /* ============ 1b. Validation ============ */
+  const DIV_YEAR_MIN = 1975; // ปีก่อตั้งตลาดหลักทรัพย์แห่งประเทศไทย
+  const DIV_YEAR_MAX = CURRENT_YEAR + 1; // อนุญาตให้กรอกปีถัดไปล่วงหน้าได้ (ประกาศปันผลล่วงหน้า)
+
+  function isValidCalendarDate(y, m, d) {
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+
+  function validateDateField(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      return "รูปแบบวันที่ต้องเป็น YYYY-MM-DD เช่น 2026-05-10";
+    }
+    const [y, m, d] = value.trim().split("-").map(Number);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) {
+      return "รูปแบบวันที่ต้องเป็น YYYY-MM-DD เช่น 2026-05-10";
+    }
+    if (!isValidCalendarDate(y, m, d)) {
+      return "ไม่ใช่วันที่ที่มีอยู่จริงในปฏิทิน";
+    }
+    return null;
+  }
+
+  // แปลงค่าจากช่อง input เป็นตัวเลขแบบเข้มงวด — ไม่ยอมให้ "12abc" หลุดผ่านมาเป็น 12 แบบ parseInt เดิม
+  function strictNumber(value) {
+    if (typeof value !== "string" || value.trim() === "") return NaN;
+    return Number(value.trim());
+  }
+
+  function validateDividendRow(row) {
+    const errors = {};
+
+    if (!Number.isFinite(row.year) || !Number.isInteger(row.year)) {
+      errors.year = "ปีต้องเป็นจำนวนเต็ม ห้ามเป็นตัวอักษรหรือทศนิยม";
+    } else if (row.year < DIV_YEAR_MIN || row.year > DIV_YEAR_MAX) {
+      errors.year = `ปีต้องอยู่ระหว่าง ${DIV_YEAR_MIN}–${DIV_YEAR_MAX}`;
+    }
+
+    if (!Number.isFinite(row.dps)) {
+      errors.dps = "เงินปันผลต้องเป็นตัวเลข";
+    } else if (row.dps < 0) {
+      errors.dps = "เงินปันผลต้องไม่ติดลบ";
+    }
+
+    const annErr = validateDateField(row.announceDate);
+    if (annErr) errors.announceDate = annErr;
+
+    const payErr = validateDateField(row.payDate);
+    if (payErr) errors.payDate = payErr;
+
+    return { valid: Object.keys(errors).length === 0, errors };
+  }
+
+  function sortHistoryAscending(ticker) {
+    if (dividendStore[ticker]) dividendStore[ticker].sort((a, b) => a.year - b.year);
+  }
+
+  function getHistoryRowEl(ticker, idx) {
+    return document.querySelector(`.stock-row[data-ticker="${CSS.escape(ticker)}"] tr[data-idx="${idx}"]`);
+  }
+
+  function showFieldError(ticker, idx, field, message) {
+    const tr = getHistoryRowEl(ticker, idx);
+    if (!tr) return;
+    const input = tr.querySelector(`[data-field="${field}"]`);
+    if (!input) return;
+    input.classList.add("input-error");
+    let err = input.parentElement.querySelector(".field-error");
+    if (!err) {
+      err = document.createElement("div");
+      err.className = "field-error";
+      input.parentElement.appendChild(err);
+    }
+    err.textContent = message;
+  }
+
+  function seedHistory(ticker, baseDps) {
+    const years = [];
+    for (let i = 4; i >= 0; i--) years.push(CURRENT_YEAR - i);
+    return years.map((year, idx) => ({
+      year,
+      dps: Math.round(baseDps * (0.85 + idx * 0.04) * 100) / 100,
+      announceDate: `${year}-02-15`,
+      payDate: `${year}-05-10`,
+      source: "seed"
+    }));
+  }
+  const SEED_BASE_DPS = { PTT:1.9, AOT:0.55, KBANK:6.5, SCB:8.36, ADVANC:7.3, CPALL:0.9, BBL:6.5, INTUCH:5.1, TOP:2.2, PTTEP:7.75, KTB:1.06, SCC:8.0, BDMS:0.36, CPN:1.15, LH:0.6, TISCO:6.85, BCP:1.6, JMART:0.3 };
+
+  /* ============ 2. Persistent state (dividends / prices / key) ============ */
+  function loadJson(key, fallback) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+  }
+  function saveJson(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+
+  let dividendStore = loadJson(LS_DIV_KEY, {});
+  let priceStore = loadJson(LS_PRICE_KEY, {});
+  // เข้ากันได้กับข้อมูลเก่าที่บันทึกไว้ก่อนมีฟิลด์ source (เคยใช้ live:true) — แปลงเป็น source:"live" ให้อัตโนมัติ
+  Object.keys(priceStore).forEach((t) => {
+    if (priceStore[t] && priceStore[t].live === true && !priceStore[t].source) priceStore[t].source = "live";
+  });
+  // เช่นเดียวกัน สำหรับประวัติปันผลเก่าที่ยังไม่มีฟิลด์ source ให้ถือว่าเป็น seed (ค่าเริ่มต้นเดิม)
+  Object.keys(dividendStore).forEach((t) => {
+    (dividendStore[t] || []).forEach((row) => { if (!row.source) row.source = "seed"; });
+  });
+  let customStocks = loadJson(LS_CUSTOM_KEY, []);
+  let symbolList = loadJson(LS_SYMBOLS_KEY, null);
+
+  function getAllStocks() { return RAW_STOCKS.concat(customStocks); }
+
+  function ensureDividendSeed(ticker) {
+    if (!dividendStore[ticker]) dividendStore[ticker] = seedHistory(ticker, SEED_BASE_DPS[ticker] || 1);
+  }
+  getAllStocks().forEach((s) => {
+    if (!dividendStore[s.ticker]) dividendStore[s.ticker] = customStocks.includes(s) ? [] : seedHistory(s.ticker, SEED_BASE_DPS[s.ticker] || 1);
+  });
+  saveJson(LS_DIV_KEY, dividendStore);
+
+  /* ============ 3b. โหลดรายชื่อหุ้นทั้งหมดของตลาด BK ============ */
+  async function loadSymbolList(statusEl) {
+    statusEl.textContent = "กำลังโหลดรายชื่อหุ้นทั้งหมด…"; statusEl.className = "status-line";
+    // ไม่มี api_token ในคำขอนี้เลย — proxy เป็นผู้แนบคีย์ฝั่งเซิร์ฟเวอร์เอง
+    const url = `${EODHD_BASE}/api/exchange-symbol-list/BK?fmt=json`;
+    if (!/^https:\/\//i.test(url)) { statusEl.textContent = "URL ปลายทางไม่ปลอดภัย"; statusEl.className = "status-line warn"; return; }
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) { statusEl.textContent = `โหลดไม่สำเร็จ (HTTP ${resp.status})`; statusEl.className = "status-line warn"; return; }
+      const ct = resp.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) { statusEl.textContent = "รูปแบบข้อมูลที่ได้ไม่ถูกต้อง (ไม่ใช่ JSON)"; statusEl.className = "status-line warn"; return; }
+      let data;
+      try { data = await resp.json(); } catch (parseErr) { statusEl.textContent = "แปลงข้อมูลไม่สำเร็จ"; statusEl.className = "status-line warn"; return; }
+      const items = (Array.isArray(data) ? data : [])
+        .filter((d) => d && d.Type === "Common Stock" && typeof d.Code === "string" && TICKER_RE.test(d.Code.toUpperCase()))
+        .map((d) => ({ code: d.Code.toUpperCase(), name: String(d.Name || d.Code).trim().slice(0, 120) }));
+      symbolList = { fetchedAt: new Date().toISOString(), items };
+      saveJson(LS_SYMBOLS_KEY, symbolList);
+      statusEl.textContent = `โหลดสำเร็จ: ${items.length.toLocaleString("th-TH")} ชื่อ (ตลาด BK ทั้งหมด)`;
+      statusEl.className = "status-line ok";
+    } catch (err) {
+      statusEl.textContent = "โหลดไม่สำเร็จ (อาจติด CORS หรือ proxy ไม่พร้อมใช้งาน)";
+      statusEl.className = "status-line warn";
+    }
+  }
+
+  function addCustomStock(code, name) {
+    code = String(code ?? "").trim().toUpperCase();
+    if (!TICKER_RE.test(code)) return; // ปฏิเสธค่าที่ไม่ใช่ ticker รูปแบบปกติ (กันค่าประหลาดจาก API/ผู้ใช้)
+    if (getAllStocks().some((s) => s.ticker === code)) return;
+    const safeName = String(name ?? "").trim().slice(0, 120) || code;
+    const entry = { ticker: code, nameTh: safeName, market: "SET", sector: "ไม่ระบุ", fallbackPrice: null };
+    customStocks.push(entry);
+    saveJson(LS_CUSTOM_KEY, customStocks);
+    ensureDividendSeed(code);
+    dividendStore[code] = [];
+    saveJson(LS_DIV_KEY, dividendStore);
+  }
+
+  /* ============ 3. Settings drawer ============ */
+  // ไม่มี API key ให้จัดการฝั่ง client อีกต่อไป — proxy ถือคีย์และสถานะการเชื่อมต่อไว้ฝั่งเซิร์ฟเวอร์
+  document.getElementById("settingsDot").className = "dot ok";
+
+  const settingsToggle = document.getElementById("settingsToggle");
+  const settingsDrawer = document.getElementById("settingsDrawer");
+  const drawerBackdrop = document.getElementById("drawerBackdrop");
+  const drawerClose = document.getElementById("drawerClose");
+  function openDrawer() {
+    settingsDrawer.classList.add("open");
+    drawerBackdrop.classList.add("open");
+    settingsDrawer.setAttribute("aria-hidden", "false");
+  }
+  function closeDrawer() {
+    settingsDrawer.classList.remove("open");
+    drawerBackdrop.classList.remove("open");
+    settingsDrawer.setAttribute("aria-hidden", "true");
+  }
+  settingsToggle.addEventListener("click", openDrawer);
+  drawerClose.addEventListener("click", closeDrawer);
+  drawerBackdrop.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  /* ============ 3c. Tab navigation ============ */
+  const navTabs = document.getElementById("navTabs");
+  const viewStocks = document.getElementById("viewStocks");
+  const viewCalculator = document.getElementById("viewCalculator");
+  const toolbarWrap = document.getElementById("toolbarWrap");
+  navTabs.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-tab]");
+    if (!btn) return;
+    const tab = btn.getAttribute("data-tab");
+    navTabs.querySelectorAll("button").forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    viewStocks.classList.toggle("active", tab === "stocks");
+    viewCalculator.classList.toggle("active", tab === "calculator");
+    toolbarWrap.style.display = tab === "stocks" ? "" : "none";
+    if (tab === "calculator") updateCalculator();
+  });
+
+  /* ============ 4. Fetch real price from EODHD ============ */
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+  function getCallCount() {
+    const rec = loadJson(LS_CALLCOUNT_KEY, { date: todayStr(), count: 0 });
+    if (rec.date !== todayStr()) return { date: todayStr(), count: 0 };
+    return rec;
+  }
+  function bumpCallCount() {
+    const rec = getCallCount();
+    rec.count += 1;
+    saveJson(LS_CALLCOUNT_KEY, rec);
+    return rec.count;
+  }
+
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  async function fetchPrice(ticker, msgEl) {
+    ticker = String(ticker ?? "").toUpperCase();
+    if (!TICKER_RE.test(ticker)) {
+      msgEl.textContent = "รูปแบบ ticker ไม่ถูกต้อง";
+      return null;
+    }
+    const used = getCallCount().count;
+    if (used >= 20) {
+      msgEl.textContent = "ครบโควตาฟรี 20 คำขอ/วันแล้ว — ลองใหม่พรุ่งนี้ หรือใช้ราคาสำรอง";
+      return null;
+    }
+    msgEl.textContent = "กำลังดึงราคา…";
+    // ไม่มี api_token ในคำขอนี้เลย — proxy เป็นผู้แนบคีย์ฝั่งเซิร์ฟเวอร์เอง ไฟล์นี้ไม่รู้จักคีย์
+    const url = `${EODHD_BASE}/api/eod/${encodeURIComponent(ticker)}.BK?fmt=json&order=d&limit=1`;
+    if (!/^https:\/\//i.test(url)) { msgEl.textContent = "URL ปลายทางไม่ปลอดภัย"; return null; }
+    try {
+      const resp = await fetch(url);
+      bumpCallCount();
+      if (!resp.ok) {
+        msgEl.textContent = `ดึงราคาไม่สำเร็จ (HTTP ${resp.status}) — ใช้ราคาสำรอง`;
+        return null;
+      }
+      const ct = resp.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        msgEl.textContent = "รูปแบบข้อมูลที่ได้ไม่ถูกต้อง — ใช้ราคาสำรอง";
+        return null;
+      }
+      let data;
+      try { data = await resp.json(); } catch (parseErr) {
+        msgEl.textContent = "แปลงข้อมูลราคาไม่สำเร็จ — ใช้ราคาสำรอง";
+        return null;
+      }
+      const latest = Array.isArray(data) ? data[0] : null;
+      const price = latest ? Number(latest.close) : NaN;
+      const date = latest && typeof latest.date === "string" ? latest.date : "";
+      if (!latest || !Number.isFinite(price) || price <= 0 || !ISO_DATE_RE.test(date)) {
+        msgEl.textContent = "ไม่มีข้อมูลราคาที่ถูกต้องสำหรับ ticker นี้ — ใช้ราคาสำรอง";
+        return null;
+      }
+      priceStore[ticker] = { price, date, source: "live", fetchedAt: new Date().toISOString() };
+      saveJson(LS_PRICE_KEY, priceStore);
+      msgEl.textContent = `อัปเดตแล้ว: ราคาปิด ${date} (LIVE จาก EODHD)`;
+      return price;
+    } catch (err) {
+      msgEl.textContent = "เรียก API ไม่สำเร็จ (อาจติด CORS หรือ proxy ไม่พร้อมใช้งาน) — ใช้ราคาสำรอง";
+      return null;
+    }
+  }
+
+  // source: "live" = ราคาจริงจาก EODHD API, "fallback" = ราคาสำรองที่ตั้งไว้ล่วงหน้า (ไม่ใช่ราคาจริง), "none" = ไม่มีราคาเลย
+  function getCurrentPrice(stock) {
+    const rec = priceStore[stock.ticker];
+    if (rec && typeof rec.price === "number" && rec.source === "live") {
+      return { price: rec.price, source: "live", date: rec.date, noPrice: false };
+    }
+    if (typeof stock.fallbackPrice === "number") {
+      return { price: stock.fallbackPrice, source: "fallback", date: null, noPrice: false };
+    }
+    return { price: 0, source: "none", date: null, noPrice: true };
+  }
+
+  function priceSourceBadge(priceInfo) {
+    if (priceInfo.source === "live") {
+      return `<span class="src-badge src-live" title="ราคาปิดจริงจาก EODHD API วันที่ ${escapeHtml(priceInfo.date || "-")}">LIVE</span>`;
+    }
+    if (priceInfo.source === "fallback") {
+      return `<span class="src-badge src-fallback" title="ราคาสำรองที่ตั้งไว้ล่วงหน้าในแอป ไม่ใช่ราคาจริงจากตลาด — กดปุ่ม \u201cดึงราคาจริงจาก EODHD\u201d เพื่อแทนที่ด้วยราคาจริง">FALLBACK</span>`;
+    }
+    return `<span class="src-badge src-none" title="ยังไม่มีราคาสำหรับหุ้นนี้เลย — กดดึงราคาจริงจาก EODHD">ไม่มีราคา</span>`;
+  }
+
+  /* ============ 5. Derived dividend metrics ============ */
+  function getHistory(ticker) { return dividendStore[ticker] || []; }
+
+  // รวมเงินปันผลเป็นรายปี (ปีเดียวกันอาจมีหลายรอบจ่าย — เช่น ระหว่างกาล + ประจำปี) เรียงจากเก่า→ใหม่
+  // ใช้เป็นฐานสำหรับทั้ง Growth และโหมด Yield "ค่าเฉลี่ยปันผลย้อนหลัง" เพื่อไม่ให้หุ้นที่จ่ายถี่กว่าดูโตเกินจริง
+  function computeAnnualSeries(history) {
+    const map = new Map();
+    history.forEach((row) => {
+      if (!Number.isFinite(row.year) || !Number.isFinite(row.dps)) return;
+      map.set(row.year, (map.get(row.year) || 0) + row.dps);
+    });
+    return Array.from(map.entries())
+      .map(([year, dps]) => ({ year, dps: Math.round(dps * 100) / 100 }))
+      .sort((a, b) => a.year - b.year);
+  }
+
+  // Growth streak: นับจากอนุกรมรายปี (ไม่ใช่รายแถวดิบ) เพื่อไม่ให้หุ้นที่จ่ายปันผลหลายครั้ง/ปีนับ streak ผิด
+  function computeGrowthStreak(annualSeries) {
+    let streak = 0;
+    for (let i = annualSeries.length - 1; i > 0; i--) {
+      if (annualSeries[i].dps > annualSeries[i - 1].dps) streak++; else break;
+    }
+    return streak;
+  }
+
+  // อัตราเติบโตปันผลแบบทบต้น (CAGR) จากอนุกรมรายปี โดยจำกัดจำนวนปีย้อนหลังได้ตาม yearsWindow (null/ไม่ใช่ตัวเลข = ใช้ทั้งหมด)
+  // คืนค่า { value, span, usedYears, reason } — value เป็น null เมื่อคำนวณไม่ได้ พร้อม reason อธิบายเสมอ (ห้ามคืน 0 เงียบๆ)
+  function computeGrowth(annualSeries, yearsWindow) {
+    if (annualSeries.length < 2) {
+      return { value: null, span: 0, usedYears: annualSeries.length, reason: "มีข้อมูลปันผลรายปีไม่ถึง 2 ปี จึงคำนวณอัตราเติบโตแบบทบต้นไม่ได้" };
+    }
+    let windowed = annualSeries;
+    let fallbackNote = null;
+    if (Number.isFinite(yearsWindow) && yearsWindow > 0) {
+      const want = yearsWindow + 1; // ต้องมีจุดข้อมูล N+1 จุด จึงจะได้ช่วง N ปี
+      if (annualSeries.length < want) {
+        fallbackNote = `มีข้อมูลปันผลรายปีเพียง ${annualSeries.length} ปี (ต้องการ ${yearsWindow} ปีตามที่เลือก) ระบบจึงใช้ข้อมูลทั้งหมดที่มีแทน`;
+      } else {
+        windowed = annualSeries.slice(-want);
+      }
+    }
+    const first = windowed[0].dps;
+    const last = windowed[windowed.length - 1].dps;
+    const span = windowed.length - 1;
+    if (first <= 0) {
+      // รองรับกรณีฐานเป็นศูนย์: หารด้วยศูนย์ไม่ได้ → แจ้งเหตุผลแทนการคืนค่า 0 หรือ Infinity
+      return { value: null, span, usedYears: span, reason: "ปีฐานของช่วงที่ใช้คำนวณมีเงินปันผลเท่ากับ 0 คำนวณอัตราเติบโตแบบทบต้น (CAGR) ไม่ได้" };
+    }
+    const growth = (Math.pow(last / first, 1 / span) - 1) * 100;
+    return { value: Math.round(growth * 10) / 10, span, usedYears: span, reason: fallbackNote };
+  }
+
+  function latestDps(history) { return history.length ? history[history.length - 1].dps : 0; }
+
+  // DPS ล่าสุด (แถวสุดท้ายในประวัติ) — ค่า null หมายถึงยังไม่มีประวัติปันผลเลย
+  function computeLatestDividend(history) {
+    if (!history.length) return { value: null, count: 0, reason: "ยังไม่มีประวัติปันผลสำหรับหุ้นนี้" };
+    return { value: latestDps(history), count: 1, reason: null };
+  }
+
+  // Dividend ย้อนหลัง 12 เดือน (TTM): รวมทุกรอบจ่ายที่ "วันจ่าย" อยู่ภายใน 12 เดือนล่าสุดนับจากวันนี้
+  // ทำให้หุ้นที่จ่ายหลายรอบ/ปี (ระหว่างกาล+ประจำปี) ถูกรวมยอดถูกต้อง แทนที่จะนับแค่แถวเดียว
+  function computeTTMDividend(history) {
+    const validRows = history.filter((r) => ISO_DATE_RE.test(r.payDate) && Number.isFinite(r.dps) && r.dps >= 0);
+    if (!validRows.length) return { value: null, count: 0, reason: "ไม่มีข้อมูล \u201cวันจ่ายปันผล\u201d ที่ถูกต้องสำหรับหุ้นนี้ จึงคำนวณ TTM ไม่ได้" };
+    const now = new Date();
+    now.setUTCHours(0, 0, 0, 0);
+    const windowStart = new Date(now);
+    windowStart.setUTCFullYear(windowStart.getUTCFullYear() - 1);
+    const inWindow = validRows.filter((r) => {
+      const d = new Date(r.payDate + "T00:00:00Z");
+      return d > windowStart && d <= now;
+    });
+    if (!inWindow.length) return { value: null, count: 0, reason: "ไม่มีรอบจ่ายปันผลที่อยู่ภายใน 12 เดือนล่าสุด (ตรวจสอบวันจ่ายในตารางด้านล่าง)" };
+    const sum = Math.round(inWindow.reduce((s, r) => s + r.dps, 0) * 100) / 100;
+    return { value: sum, count: inWindow.length, reason: null };
+  }
+
+  // เงินปันผลเฉลี่ยย้อนหลัง: ค่าเฉลี่ยของยอดปันผลรายปี (อนุกรมที่รวมหลายรอบจ่ายในปีเดียวกันแล้ว) ตลอดประวัติที่มี
+  function computeAvgDividend(annualSeries) {
+    if (!annualSeries.length) return { value: null, count: 0, reason: "ยังไม่มีประวัติปันผลสำหรับหุ้นนี้" };
+    const sum = annualSeries.reduce((s, r) => s + r.dps, 0);
+    return { value: Math.round((sum / annualSeries.length) * 100) / 100, count: annualSeries.length, reason: null };
+  }
+
+  function getYieldBasis() {
+    const el = document.getElementById("yieldBasis");
+    return el ? el.value : "latest";
+  }
+  function getGrowthYearsWindow() {
+    const el = document.getElementById("growthYears");
+    if (!el || el.value === "all") return null;
+    const n = parseInt(el.value, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  function yieldBasisLabel(mode) {
+    if (mode === "ttm") return "TTM (ย้อนหลัง 12 เดือน)";
+    if (mode === "avg") return "ค่าเฉลี่ยปันผลย้อนหลัง";
+    return "DPS ล่าสุด";
+  }
+  function yieldBasisShortLabel(mode) {
+    if (mode === "ttm") return "TTM";
+    if (mode === "avg") return "AVG";
+    return "ล่าสุด";
+  }
+
+  function buildView() {
+    const yieldBasis = getYieldBasis();
+    const growthYearsWindow = getGrowthYearsWindow();
+    return getAllStocks().map((s) => {
+      const history = getHistory(s.ticker);
+      const priceInfo = getCurrentPrice(s);
+      const annualSeries = computeAnnualSeries(history);
+
+      let dpsResult;
+      if (yieldBasis === "ttm") dpsResult = computeTTMDividend(history);
+      else if (yieldBasis === "avg") dpsResult = computeAvgDividend(annualSeries);
+      else dpsResult = computeLatestDividend(history);
+
+      const yieldPct = (dpsResult.value != null && priceInfo.price > 0)
+        ? Math.round((dpsResult.value / priceInfo.price) * 10000) / 100
+        : null;
+
+      const growthResult = computeGrowth(annualSeries, growthYearsWindow);
+
+      return {
+        ...s,
+        history,
+        priceInfo,
+        latestDps: latestDps(history), // เครื่องคำนวณด้านล่างใช้ "DPS ล่าสุด" เสมอ ไม่ขึ้นกับตัวเลือก Yield basis
+        dpsBasisValue: dpsResult.value,
+        dpsBasisCount: dpsResult.count,
+        yieldPct,
+        yieldBasis,
+        yieldReason: dpsResult.reason,
+        growthPct: growthResult.value,
+        growthUsedYears: growthResult.usedYears,
+        growthReason: growthResult.reason,
+        streak: computeGrowthStreak(annualSeries)
+      };
+    });
+  }
+
+  /* ============ 6. Formatting ============ */
+  const thb = (n) => "฿" + Number(n).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const thbInt = (n) => "฿" + Math.round(n).toLocaleString("th-TH");
+  const pct = (n) => n.toFixed(2) + "%";
+
+  /* ============ 7. Render stock list ============ */
+  const listEl = document.getElementById("stockList");
+  const emptyEl = document.getElementById("emptyState");
+  const resultCountEl = document.getElementById("resultCount");
+  let openTicker = null;
+  let cachedView = null;
+
+  function historySourceBadge(row) {
+    if (row.source === "user") {
+      return `<span class="src-badge src-live" title="แถวนี้ถูกแก้ไข/กรอกเองโดยคุณ — ถือเป็นข้อมูลที่คุณยืนยันแล้ว">ยืนยันแล้ว</span>`;
+    }
+    return `<span class="src-badge src-seed" title="เป็นข้อมูลตัวอย่าง (SEED DATA) ที่แอปสร้างขึ้นเองเพื่อสาธิต ไม่ใช่ประวัติปันผลจริง — กรุณาแก้ไขตัวเลขให้ตรงกับข้อมูลจริงที่คุณตรวจสอบมา">SEED DATA</span>`;
+  }
+
+  function historyRowsHtml(ticker, history) {
+    let rows = "";
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      let yoy = "–";
+      if (i > 0) {
+        const change = history[i-1].dps > 0 ? ((h.dps - history[i-1].dps) / history[i-1].dps) * 100 : 0;
+        yoy = `<span style="color:${change>=0?'var(--teal)':'var(--red)'}">${change>=0?"+":""}${change.toFixed(1)}%</span>`;
+      }
+      const safeTicker = escapeHtml(ticker);
+      rows += `<tr data-idx="${i}">
+        <td class="src-cell">${historySourceBadge(h)}</td>
+        <td><input type="number" step="1" min="${DIV_YEAR_MIN}" max="${DIV_YEAR_MAX}" class="edit-year" value="${escapeHtml(h.year)}" data-ticker="${safeTicker}" data-idx="${i}" data-field="year"></td>
+        <td><input type="number" step="0.01" min="0" class="edit-dps" value="${escapeHtml(h.dps)}" data-ticker="${safeTicker}" data-idx="${i}" data-field="dps"></td>
+        <td class="num">${yoy}</td>
+        <td><input type="text" class="edit-ann" value="${escapeHtml(h.announceDate)}" data-ticker="${safeTicker}" data-idx="${i}" data-field="announceDate"></td>
+        <td><input type="text" class="edit-pay" value="${escapeHtml(h.payDate)}" data-ticker="${safeTicker}" data-idx="${i}" data-field="payDate"></td>
+        <td><button class="row-del" data-del="${safeTicker}" data-idx="${i}" title="ลบแถวนี้">✕</button></td>
+      </tr>`;
+    }
+    return rows;
+  }
+
+  function stockRowHtml(s) {
+    const isOpen = s.ticker === openTicker;
+    // ค่าเหล่านี้อาจมาจาก API (symbol list) หรือช่องค้นหาของผู้ใช้ — ต้อง escape ก่อนแทรกลง HTML เสมอ
+    const safeTicker = escapeHtml(s.ticker);
+    const safeMarket = escapeHtml(s.market);
+    const safeName = escapeHtml(s.nameTh);
+    const safeSector = escapeHtml(s.sector);
+    const badge = s.streak >= 3 ? `<span class="streak-badge">↑ โต ${s.streak} ปีติด</span>` : "";
+    const priceLabelCls = s.priceInfo.source === "live" ? "" : "stale";
+
+    let fetchMsg;
+    if (s.priceInfo.source === "live") {
+      fetchMsg = `ราคาปิดล่าสุด ${s.priceInfo.date} (LIVE จาก EODHD)`;
+    } else if (s.priceInfo.source === "fallback") {
+      fetchMsg = "กำลังแสดงราคาสำรอง (FALLBACK) ไม่ใช่ราคาจริง — กดปุ่มด้านซ้ายเพื่อดึงราคาจริง";
+    } else {
+      fetchMsg = "ไม่มีราคาสำหรับหุ้นนี้เลย — กดปุ่มด้านซ้ายเพื่อดึงราคาจริงจาก EODHD";
+    }
+
+    const warningBanner = s.priceInfo.source !== "live"
+      ? `<div class="data-warning">⚠️ <span><strong>${s.priceInfo.source === "fallback" ? "ราคานี้เป็นราคาสำรอง (FALLBACK)" : "ยังไม่มีราคาสำหรับหุ้นนี้"}</strong> — ไม่ใช่ราคาจริงจากตลาดในขณะนี้ กดปุ่ม \u201cดึงราคาจริงจาก EODHD\u201d ด้านล่างเพื่ออัปเดต</span></div>`
+      : "";
+
+    return `
+    <div class="stock-row ${isOpen ? "open" : ""}" data-ticker="${safeTicker}">
+      <div class="stock-row-head" data-toggle="${safeTicker}">
+        <div class="stock-id">
+          <span class="stock-ticker">${safeTicker}<span class="stock-market">${safeMarket}</span></span>
+          <div class="stock-name">${safeName} · ${safeSector}</div>
+        </div>
+        <div class="metric hide-mobile">
+          <div class="metric-label">ราคา ${priceSourceBadge(s.priceInfo)}</div>
+          <div class="metric-value num ${priceLabelCls}">${s.priceInfo.noPrice ? "ยังไม่มี" : thb(s.priceInfo.price)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Yield <span class="basis-tag">(${escapeHtml(yieldBasisShortLabel(s.yieldBasis))})</span></div>
+          ${s.priceInfo.price <= 0
+            ? `<div class="metric-value num">–</div>`
+            : s.yieldPct == null
+              ? `<div class="metric-value insufficient" title="${escapeHtml(s.yieldReason || "ไม่มีข้อมูลเพียงพอ")}">ไม่มีข้อมูลเพียงพอ</div>`
+              : `<div class="metric-value yield-value num">${pct(s.yieldPct)}</div>`}
+        </div>
+        <div class="metric hide-mobile">
+          <div class="metric-label">Growth <span class="basis-tag">(${s.growthUsedYears ? escapeHtml(s.growthUsedYears + "Y") : "–"})</span></div>
+          ${s.growthPct == null
+            ? `<div class="metric-value insufficient" title="${escapeHtml(s.growthReason || "ไม่มีข้อมูลเพียงพอ")}">ไม่มีข้อมูลเพียงพอ</div>`
+            : `<div class="metric-value num">${s.growthPct >= 0 ? "+" : ""}${pct(s.growthPct)}</div>`}
+        </div>
+        <div class="metric">
+          ${badge}
+          <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+        </div>
+      </div>
+      <div class="stock-detail">
+        ${warningBanner}
+        <div class="basis-note">
+          Yield คำนวณจาก: <strong>${escapeHtml(yieldBasisLabel(s.yieldBasis))}</strong>${s.dpsBasisCount ? ` (รวม ${s.dpsBasisCount} รายการ)` : ""}${s.yieldReason ? ` — <span style="color:var(--red)">${escapeHtml(s.yieldReason)}</span>` : ""}<br>
+          Growth คำนวณจากช่วง: <strong>${s.growthUsedYears ? `${s.growthUsedYears} ปีล่าสุดที่มีข้อมูล` : "ไม่มีข้อมูลพอ"}</strong>${s.growthReason ? ` — <span style="color:${s.growthPct == null ? "var(--red)" : "var(--ink-faint)"}">${escapeHtml(s.growthReason)}</span>` : ""}
+        </div>
+        <div class="price-line">
+          <button type="button" data-fetch="${safeTicker}">ดึงราคาจริงจาก EODHD</button>
+          <span class="fetch-msg" id="fetchmsg-${safeTicker}">${fetchMsg}</span>
+        </div>
+        <table class="history-table">
+          <caption>ประวัติเงินปันผล — <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> คือข้อมูลตัวอย่างที่ต้องแก้ไขให้ตรงจริง <span class="save-flag" id="saveflag-${safeTicker}"></span></caption>
+          <thead><tr><th>แหล่งข้อมูล</th><th>ปี</th><th>ปันผล/หุ้น (บาท)</th><th>YoY</th><th>วันประกาศ</th><th>วันจ่าย</th><th></th></tr></thead>
+          <tbody>${historyRowsHtml(s.ticker, s.history)}</tbody>
+        </table>
+        <div class="table-actions">
+          <button type="button" data-addrow="${safeTicker}">+ เพิ่มปี</button>
+          <button type="button" data-reset="${safeTicker}">รีเซ็ตเป็นค่าเริ่มต้น</button>
+        </div>
+        <button class="use-btn" data-use="${safeTicker}">ใช้หุ้นนี้ในเครื่องคำนวณ →</button>
+      </div>
+    </div>`;
+  }
+
+  function getFiltered(view) {
+    const q = document.getElementById("searchInput").value.trim().toLowerCase();
+    const minY = parseFloat(document.getElementById("minYield").value);
+    const market = document.getElementById("marketFilter").value;
+    const sortBy = document.getElementById("sortBy").value;
+    let arr = view.filter((s) => {
+      const matchesQ = !q || s.ticker.toLowerCase().includes(q) || s.nameTh.includes(q);
+      // minY <= 0 ("ทุก Dividend Yield") ต้องแสดงทุกหุ้นเสมอ รวมถึงหุ้นที่ยังคำนวณ Yield ไม่ได้ (yieldPct = null)
+      // ถ้าตั้ง threshold ไว้ > 0 หุ้นที่ยังไม่มีข้อมูลเพียงพอจะถูกกรองออก เพราะยืนยันไม่ได้ว่าเข้าเกณฑ์จริง
+      const matchesY = minY <= 0 ? true : (s.yieldPct != null && s.yieldPct >= minY);
+      const matchesM = market === "all" || s.market === market;
+      return matchesQ && matchesY && matchesM;
+    });
+    // ค่า yield/growth ที่เป็น null (ข้อมูลไม่พอ) ให้เรียงไปอยู่ท้ายสุดเสมอ ไม่ว่าทิศทางการเรียงจะเป็นแบบใด
+    const cmpDesc = (a, b) => (a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : b - a);
+    const cmpAsc = (a, b) => (a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : a - b);
+    arr.sort((a, b) => {
+      switch (sortBy) {
+        case "yield-asc": return cmpAsc(a.yieldPct, b.yieldPct);
+        case "growth-desc": return cmpDesc(a.growthPct, b.growthPct);
+        case "ticker-asc": return a.ticker.localeCompare(b.ticker);
+        default: return cmpDesc(a.yieldPct, b.yieldPct);
+      }
+    });
+    return arr;
+  }
+
+  function renderSuggestions() {
+    const box = document.getElementById("searchSuggestions");
+    const q = document.getElementById("searchInput").value.trim().toLowerCase();
+    if (!q || !symbolList || !symbolList.items) { box.innerHTML = ""; box.style.display = "none"; return; }
+    const already = new Set(getAllStocks().map((s) => s.ticker));
+    const matches = symbolList.items
+      .filter((it) => !already.has(it.code) && (it.code.toLowerCase().includes(q) || it.name.toLowerCase().includes(q)))
+      .slice(0, 6);
+    if (matches.length === 0) { box.innerHTML = ""; box.style.display = "none"; return; }
+    box.style.display = "block";
+    box.innerHTML = `<div class="sugg-label">พบในรายชื่อหุ้นทั้งหมดของ EODHD (ยังไม่อยู่ในรายการ — กดเพื่อเพิ่ม):</div>` +
+      matches.map((m) => {
+        const code = escapeHtml(m.code);
+        const name = escapeHtml(m.name);
+        return `<button type="button" class="sugg-item" data-addstock="${code}" data-name="${name}">+ ${code} — ${name}</button>`;
+      }).join("");
+  }
+
+  function renderList() {
+    const view = buildView();
+    cachedView = view;
+    const arr = getFiltered(view);
+    resultCountEl.textContent = `${arr.length} จาก ${getAllStocks().length} หุ้นในรายการของคุณ`;
+    if (arr.length === 0) { listEl.innerHTML = ""; emptyEl.style.display = "block"; } else {
+      emptyEl.style.display = "none";
+      listEl.innerHTML = arr.map(stockRowHtml).join("");
+    }
+    populateCalcOptions(view);
+    updateCalculator();
+    renderSuggestions();
+  }
+
+  function flashSaved(ticker) {
+    const el = document.getElementById(`saveflag-${ticker}`);
+    if (!el) return;
+    el.textContent = "บันทึกแล้ว ✓";
+    setTimeout(() => { if (el) el.textContent = ""; }, 1500);
+  }
+
+  listEl.addEventListener("click", async (e) => {
+    const toggleEl = e.target.closest("[data-toggle]");
+    const useEl = e.target.closest("[data-use]");
+    const fetchEl = e.target.closest("[data-fetch]");
+    const addRowEl = e.target.closest("[data-addrow]");
+    const resetEl = e.target.closest("[data-reset]");
+    const delEl = e.target.closest("[data-del]");
+
+    if (useEl) {
+      document.getElementById("calcStock").value = useEl.getAttribute("data-use");
+      navTabs.querySelector('[data-tab="calculator"]').click();
+      return;
+    }
+    if (fetchEl) {
+      const ticker = fetchEl.getAttribute("data-fetch");
+      const msgEl = document.getElementById(`fetchmsg-${ticker}`);
+      await fetchPrice(ticker, msgEl);
+      renderList();
+      openTicker = ticker;
+      document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+      return;
+    }
+    if (addRowEl) {
+      const ticker = addRowEl.getAttribute("data-addrow");
+      const hist = dividendStore[ticker];
+      const lastYear = hist.length ? hist[hist.length - 1].year : CURRENT_YEAR;
+      hist.push({ year: lastYear + 1, dps: hist.length ? hist[hist.length - 1].dps : 1, announceDate: `${lastYear + 1}-02-15`, payDate: `${lastYear + 1}-05-10`, source: "user" });
+      sortHistoryAscending(ticker);
+      saveJson(LS_DIV_KEY, dividendStore);
+      openTicker = ticker;
+      renderList();
+      document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+      return;
+    }
+    if (resetEl) {
+      const ticker = resetEl.getAttribute("data-reset");
+      dividendStore[ticker] = seedHistory(ticker, SEED_BASE_DPS[ticker] || 1);
+      sortHistoryAscending(ticker);
+      saveJson(LS_DIV_KEY, dividendStore);
+      openTicker = ticker;
+      renderList();
+      document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+      return;
+    }
+    if (delEl) {
+      const ticker = delEl.getAttribute("data-del");
+      const idx = parseInt(delEl.getAttribute("data-idx"), 10);
+      dividendStore[ticker].splice(idx, 1);
+      saveJson(LS_DIV_KEY, dividendStore);
+      openTicker = ticker;
+      renderList();
+      document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+      return;
+    }
+    if (toggleEl) {
+      const ticker = toggleEl.getAttribute("data-toggle");
+      openTicker = openTicker === ticker ? null : ticker;
+      renderList();
+    }
+  });
+
+  listEl.addEventListener("change", (e) => {
+    const input = e.target.closest("input[data-ticker][data-field]");
+    if (!input) return;
+    const ticker = input.getAttribute("data-ticker");
+    const idx = parseInt(input.getAttribute("data-idx"), 10);
+    const field = input.getAttribute("data-field");
+    const row = dividendStore[ticker][idx];
+    if (!row) return;
+
+    // สร้างค่าที่ "จะเป็น" หลังแก้ไข โดยยังไม่แตะข้อมูลจริงใน dividendStore จนกว่าจะผ่านการตรวจสอบ
+    const candidate = { ...row };
+    if (field === "year") candidate.year = strictNumber(input.value);
+    else if (field === "dps") candidate.dps = strictNumber(input.value);
+    else candidate[field] = input.value;
+    candidate.source = "user"; // ผู้ใช้แก้ไขค่านี้เองแล้ว จึงไม่ใช่ข้อมูลตัวอย่าง (seed) อีกต่อไป
+
+    const result = validateDividendRow(candidate);
+
+    if (!result.valid) {
+      // ข้อมูลผิด: ห้ามบันทึกลง localStorage และห้ามแก้ dividendStore เดิม — แสดง error ใต้ช่องที่มีปัญหาแทน
+      showFieldError(ticker, idx, field, result.errors[field] || Object.values(result.errors)[0]);
+      return;
+    }
+
+    dividendStore[ticker][idx] = candidate;
+    sortHistoryAscending(ticker);
+    saveJson(LS_DIV_KEY, dividendStore);
+    flashSaved(ticker);
+    renderList();
+    document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+  });
+
+  // ตัวกรองแบบ select เปลี่ยนไม่บ่อย เรนเดอร์ทันที
+  ["minYield", "marketFilter", "sortBy", "yieldBasis", "growthYears"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", renderList);
+  });
+  // ช่องค้นหาพิมพ์ถี่กว่ามาก — ดีบาวซ์ไว้ลดจำนวนครั้งที่ต้อง re-render/กรอง symbolList หลักพันรายการ
+  document.getElementById("searchInput").addEventListener("input", debounce(renderList, 150));
+
+  document.getElementById("searchSuggestions").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-addstock]");
+    if (!btn) return;
+    addCustomStock(btn.getAttribute("data-addstock"), btn.getAttribute("data-name"));
+    document.getElementById("searchInput").value = btn.getAttribute("data-addstock");
+    openTicker = btn.getAttribute("data-addstock");
+    renderList();
+    document.querySelector(`.stock-row[data-ticker="${openTicker}"]`)?.classList.add("open");
+  });
+
+  document.getElementById("loadSymbolsBtn").addEventListener("click", () => {
+    loadSymbolList(document.getElementById("symbolsStatus")).then(renderSuggestions);
+  });
+  if (symbolList && symbolList.items) {
+    document.getElementById("symbolsStatus").textContent = `มีรายชื่อ ${symbolList.items.length.toLocaleString("th-TH")} ชื่อ (โหลดล่าสุด ${new Date(symbolList.fetchedAt).toLocaleDateString("th-TH")})`;
+    document.getElementById("symbolsStatus").className = "status-line ok";
+  }
+
+  /* ============ 8. Calculator ============ */
+  const calcStockEl = document.getElementById("calcStock");
+  function populateCalcOptions(view) {
+    const prevVal = calcStockEl.value;
+    calcStockEl.innerHTML = view.map((s) => `<option value="${escapeHtml(s.ticker)}">${escapeHtml(s.ticker)} — ${escapeHtml(s.nameTh)}</option>`).join("");
+    if (prevVal && view.some((s) => s.ticker === prevVal)) calcStockEl.value = prevVal;
+  }
+
+  let calcMode = "shares";
+  document.getElementById("modeToggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-mode]");
+    if (!btn) return;
+    calcMode = btn.getAttribute("data-mode");
+    document.querySelectorAll("#modeToggle button").forEach((b) => b.classList.toggle("active", b === btn));
+    document.getElementById("sharesField").style.display = calcMode === "shares" ? "block" : "none";
+    document.getElementById("cashField").style.display = calcMode === "cash" ? "block" : "none";
+    updateCalculator();
+  });
+
+  function updateCalculator() {
+    const view = cachedView || buildView();
+    const stock = view.find((s) => s.ticker === calcStockEl.value) || view[0];
+    if (!stock) return;
+
+    // ป้องกันราคาหุ้นเป็นศูนย์ / ไม่มีราคา / ไม่ใช่ตัวเลข
+    const rawPrice = Number(stock.priceInfo.price);
+    const hasPrice = !stock.priceInfo.noPrice && Number.isFinite(rawPrice) && rawPrice > 0;
+    const price = hasPrice ? rawPrice : 0;
+
+    // ป้องกัน DPS ที่ไม่ใช่ตัวเลข
+    const rawDps = Number(stock.latestDps);
+    const dps = Number.isFinite(rawDps) && rawDps > 0 ? rawDps : 0;
+
+    let shares = 0;      // จำนวนหุ้น: ต้องเป็นจำนวนเต็ม ไม่ติดลบ
+    let invested = 0;    // เงินลงทุนจริง (ต้องไม่เกินเงินสดที่มี)
+    let cashInput = 0;   // เงินสดที่ผู้ใช้กรอก
+    let remaining = 0;   // เงินสดคงเหลือหลังซื้อ
+
+    if (calcMode === "shares") {
+      const rawShares = parseFloat(document.getElementById("sharesInput").value);
+      shares = Number.isFinite(rawShares) ? Math.max(0, Math.floor(rawShares)) : 0;
+      invested = hasPrice ? shares * price : 0;
+    } else {
+      // โหมดเงินสด: เงินสดต้อง >= 0
+      const rawCash = parseFloat(document.getElementById("cashInput").value);
+      cashInput = Number.isFinite(rawCash) ? Math.max(0, rawCash) : 0;
+
+      if (hasPrice) {
+        shares = Math.floor(cashInput / price);   // จำนวนหุ้นที่ซื้อได้จริง (จำนวนเต็ม)
+        invested = shares * price;                // เงินลงทุนจริง — คำนวณจากจำนวนหุ้นที่ซื้อได้จริง จึงไม่เกินเงินสด
+        remaining = cashInput - invested;          // เงินสดคงเหลือ
+      } else {
+        // ไม่มีราคา -> ซื้อไม่ได้ ป้องกัน NaN/Infinity โดยตั้งค่าเป็น 0 ทั้งหมด
+        shares = 0;
+        invested = 0;
+        remaining = cashInput;
+      }
+    }
+
+    const gross = shares * dps;
+    const tax = gross * 0.10;
+    const net = gross - tax;
+    // ใช้ "เงินลงทุนจริง" (invested) ในการคำนวณ Personal Yield เสมอ ไม่ใช่ยอดเงินสดที่กรอก
+    const personalYield = invested > 0 ? (net / invested) * 100 : 0;
+
+    const priceSrcSuffix = stock.priceInfo.source === "live" ? " (LIVE)" : stock.priceInfo.source === "fallback" ? " (FALLBACK — ไม่ใช่ราคาจริง)" : "";
+    document.getElementById("resPrice").textContent = !hasPrice ? "ยังไม่มีราคา — กดดึงราคาในรายการก่อน" : thb(price) + priceSrcSuffix;
+    document.getElementById("resShares").textContent = shares.toLocaleString("th-TH") + " หุ้น";
+    document.getElementById("resDps").textContent = thb(dps) + " /หุ้น";
+    document.getElementById("resGross").textContent = thbInt(gross);
+    document.getElementById("resTax").textContent = "−" + thbInt(tax);
+    document.getElementById("resNet").textContent = thbInt(net);
+    document.getElementById("resPersonalYield").textContent = pct(personalYield);
+
+    // แสดงแถว "เงินลงทุนจริง" / "เงินสดคงเหลือ" เฉพาะโหมดเงินสดเท่านั้น
+    const investedRow = document.getElementById("resInvestedRow");
+    const remainingRow = document.getElementById("resRemainingRow");
+    if (calcMode === "cash") {
+      investedRow.style.display = "";
+      remainingRow.style.display = "";
+      document.getElementById("resInvested").textContent = thbInt(invested);
+      document.getElementById("resRemaining").textContent = thbInt(remaining);
+    } else {
+      investedRow.style.display = "none";
+      remainingRow.style.display = "none";
+    }
+  }
+
+  [calcStockEl, document.getElementById("sharesInput"), document.getElementById("cashInput")].forEach((el) => {
+    el.addEventListener("input", updateCalculator);
+    el.addEventListener("change", updateCalculator);
+  });
+
+  /* ============ 9. Init ============ */
+  renderList();
+})();
+</script>
+</body>
+</html>
