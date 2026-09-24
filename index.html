@@ -1681,6 +1681,10 @@
   // เปิดให้ชุดทดสอบ (เปิดหน้าด้วย ?test) เรียกใช้ฟังก์ชันล้วนได้ — ไม่มีฟังก์ชันไหนในนี้แก้ข้อมูลจริงของผู้ใช้
   window.TDF = { APP_ID, SCHEMA_VERSION, TAX_RATE, RAW_STOCKS, calcPosition, computeYieldPct, computeAnnualSeries, computeGrowth, computeGrowthStreak,
     computeLatestDividend, computeTTMDividend, incompleteYears, rowKind, rowKeys, PERIODS, validateDividendRow, computeAvgDividend, getCurrentPrice, priceInfoFrom, divRowStatus, assessData, passesScreen, SOURCES, STATUSES, buildBackup, parseBackup, loadAllState, cleanSymbolCache };
+  // เปิดฟังก์ชันซิงก์กับ Supabase ให้เรียกจาก browser console ได้ (เช่น TDF.pushAllToSupabase() ตอน migrate ข้อมูลเก่าครั้งแรก)
+  window.TDF.pushAllToSupabase = pushAllToSupabase;
+  window.TDF.pullFromSupabase = pullFromSupabase;
+  window.TDF.dbHardReset = dbHardReset;
 
   /* ============ 9. Init ============ */
   updateAuthUI();
