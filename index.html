@@ -1689,7 +1689,7 @@
       if (supaUser) { await supabaseDB.auth.signOut(); return; }
       const email = prompt("กรอกอีเมลเพื่อรับลิงก์เข้าสู่ระบบ (ใช้ล็อกอินเครื่องเดียวกันทุกอุปกรณ์เพื่อซิงก์ข้อมูล):");
       if (!email || !email.trim()) return;
-      const { error } = await supabaseDB.auth.signInWithOtp({ email: email.trim() });
+      const { error } = await supabaseDB.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: "https://nattapatk-create.github.io/thai-dividend-finder/" } });
       alert(error ? "ส่งลิงก์ไม่สำเร็จ: " + error.message : `ส่งลิงก์แล้ว เช็กอีเมล (${email.trim()}) แล้วกดลิงก์เพื่อเข้าสู่ระบบ`);
     });
     supabaseDB.auth.onAuthStateChange((_event, session) => {
