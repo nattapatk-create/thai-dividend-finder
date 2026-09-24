@@ -224,6 +224,8 @@
     </nav>
     <div class="auth-bar" id="authBar" style="display:none; align-items:center; gap:8px; font-size:.78rem; color:var(--ink-soft);">
       <span id="authStatus"></span>
+      <span id="syncStatus"></span>
+      <button type="button" class="settings-btn" id="pushBtn" style="display:none">อัปโหลดข้อมูลในเครื่อง</button>
       <button type="button" class="settings-btn" id="authBtn"></button>
     </div>
     <button type="button" class="settings-btn" id="settingsToggle">
@@ -685,24 +687,42 @@
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
   let supaUser = null; // ผู้ใช้ที่ล็อกอินอยู่ตอนนี้ (null = ยังไม่ล็อกอิน หรือยังไม่ได้ตั้งค่า Supabase)
-  function isDbReady() { return !!(supabaseDB && supaUser); }
+  const LS_DIRTY_KEY = "tdf_db_dirty"; // มีข้อมูลในเครื่องที่ยังไม่ขึ้นฐานข้อมูล
+  let syncErrors = [], pulling = false;
+  function setDirty(b) { try { b ? localStorage.setItem(LS_DIRTY_KEY, "1") : localStorage.removeItem(LS_DIRTY_KEY); } catch (e) {} }
+  function isDirty() { try { return localStorage.getItem(LS_DIRTY_KEY) === "1"; } catch (e) { return false; } }
+  function showSync(msg, bad) { const el = document.getElementById("syncStatus"); if (el) { el.textContent = msg; el.style.color = bad ? "#c0392b" : ""; } }
+  const dbWarn = () => (supabaseDB && supaUser ? "⚠ ข้อมูลในฐานข้อมูลกลาง (Supabase) จะถูกลบด้วย และมีผลกับทุกอุปกรณ์\n\n" : "");
+  // supabase-js ไม่ throw เมื่อ query ล้มเหลว แต่คืน { error } — ต้องเช็กทุกครั้ง
+  function dbOk(res, label) {
+    if (res && res.error) {
+      console.warn("sync " + label + " ล้มเหลว", res.error);
+      syncErrors.push(label + ": " + res.error.message); setDirty(true);
+      showSync("⚠ ซิงก์ล้มเหลว (" + label + "): " + res.error.message, true);
+      return false;
+    }
+    return true;
+  }
+  function isDbReady() {
+    if (supabaseDB && !supaUser) setDirty(true); // แก้ข้อมูลตอนยังไม่ล็อกอิน = มีข้อมูลในเครื่องที่ยังไม่ขึ้น DB
+    return !!(supabaseDB && supaUser);
+  }
 
   async function dbUpsertStock(s) {
-    if (!isDbReady()) return;
+    if (!isDbReady()) return false;
     try {
-      await supabaseDB.from("stocks").upsert(
+      return dbOk(await supabaseDB.from("stocks").upsert(
         { ticker: s.ticker, name_th: s.nameTh, market: s.market, sector: s.sector, is_custom: !RAW_STOCKS.some((r) => r.ticker === s.ticker) },
-        { onConflict: "ticker" }
-      );
-    } catch (e) { console.warn("sync stocks ล้มเหลว", e); }
+        { onConflict: "ticker" }), "stocks");
+    } catch (e) { return dbOk({ error: e }, "stocks"); }
   }
   async function dbGetStockId(ticker) {
     if (!isDbReady()) return null;
-    const { data } = await supabaseDB.from("stocks").select("id").eq("ticker", ticker).maybeSingle();
-    return data ? data.id : null;
+    const res = await supabaseDB.from("stocks").select("id").eq("ticker", ticker).maybeSingle();
+    return dbOk(res, "stocks") && res.data ? res.data.id : null;
   }
   async function dbUpsertPrice(ticker, p) {
-    if (!isDbReady()) return;
+    if (!isDbReady()) return false;
     try {
       let stockId = await dbGetStockId(ticker);
       if (!stockId) {
@@ -710,69 +730,73 @@
         if (stock) await dbUpsertStock(stock);
         stockId = await dbGetStockId(ticker);
       }
-      if (!stockId) return;
-      await supabaseDB.from("prices").upsert({
+      if (!stockId) return false;
+      return dbOk(await supabaseDB.from("prices").upsert({
         stock_id: stockId, price: p.price, data_date: p.dataDate, source: p.source,
         source_url: p.sourceUrl, fetched_at: p.fetchedAt, verified: !!p.verified
-      });
-    } catch (e) { console.warn("sync prices ล้มเหลว", e); }
+      }), "prices"); // ประวัติราคาลง price_history เองผ่าน trigger ฝั่ง DB (ดู supabase_migration.sql)
+    } catch (e) { return dbOk({ error: e }, "prices"); }
   }
-  async function dbUpsertDividendRow(ticker, r) {
-    if (!isDbReady()) return;
-    try {
-      const stockId = await dbGetStockId(ticker);
-      if (!stockId) return;
-      await supabaseDB.from("dividends").upsert({
-        stock_id: stockId, fiscal_year: r.fiscalYear, period: r.period, dps: r.dps, currency: r.currency,
-        announce_date: r.announceDate, xd_date: r.xdDate, record_date: r.recordDate, payment_date: r.paymentDate,
-        announcement_id: r.announcementId, source: r.source, source_url: r.sourceUrl,
-        fetched_at: r.fetchedAt, data_date: r.dataDate, verified: !!r.verified
-      }, { onConflict: "stock_id,fiscal_year,period,payment_date" });
-    } catch (e) { console.warn("sync dividends ล้มเหลว", e); }
-  }
+  const dbDivRow = (r) => ({
+    fiscal_year: r.fiscalYear, period: r.period, dps: r.dps, currency: r.currency, announce_date: r.announceDate,
+    xd_date: r.xdDate, record_date: r.recordDate, payment_date: r.paymentDate, announcement_id: r.announcementId,
+    source: r.source, source_url: r.sourceUrl, fetched_at: r.fetchedAt, data_date: r.dataDate, verified: !!r.verified
+  });
   async function dbReplaceDividendHistory(ticker, rows) {
-    // ลบประวัติปันผลเดิมของ ticker นี้ใน DB ทั้งหมดแล้วใส่ใหม่ตาม rows — ใช้ตอนแก้ไข/ลบ/รีเซ็ตแถว กันข้อมูลเก่าค้าง
-    if (!isDbReady()) return;
+    // เรียก RPC replace_dividends: ลบ+ใส่ใหม่ใน transaction เดียว — ล้มเหลวแล้ว rollback ข้อมูลเดิมใน DB ไม่หาย
+    if (!isDbReady()) return false;
     try {
       const stockId = await dbGetStockId(ticker);
-      if (!stockId) return;
-      await supabaseDB.from("dividends").delete().eq("stock_id", stockId);
-      for (const r of rows) await dbUpsertDividendRow(ticker, r);
-    } catch (e) { console.warn("sync dividends ล้มเหลว", e); }
+      if (!stockId) return false;
+      return dbOk(await supabaseDB.rpc("replace_dividends", { p_stock_id: stockId, p_rows: rows.map(dbDivRow) }), "dividends");
+    } catch (e) { return dbOk({ error: e }, "dividends"); }
   }
   async function dbUpsertSymbolCache(cache) {
-    if (!isDbReady() || !cache) return;
-    try { await supabaseDB.from("symbol_universe_cache").upsert({ id: true, items: cache.items, fetched_at: cache.fetchedAt }); }
-    catch (e) { console.warn("sync symbol cache ล้มเหลว", e); }
+    if (!supabaseDB || !supaUser || !cache) return false; // แคชรายชื่อหุ้น: ไม่นับเป็นข้อมูลค้างซิงก์
+    try { return dbOk(await supabaseDB.from("symbol_universe_cache").upsert({ id: true, items: cache.items, fetched_at: cache.fetchedAt }), "symbol cache"); }
+    catch (e) { return dbOk({ error: e }, "symbol cache"); }
   }
   async function dbHardReset() {
-    // ล้างข้อมูลใน Supabase ให้ตรงกับปุ่ม Reset ฝั่ง local (เรียกก่อน import/reset เสมอ)
-    if (!isDbReady()) return;
+    // ล้างข้อมูลใน Supabase ให้ตรงกับปุ่ม Reset ฝั่ง local (เรียกก่อน import/reset เสมอ) — คืน true เมื่อสำเร็จ
+    if (!isDbReady()) return false;
     try {
-      await supabaseDB.from("dividends").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-      await supabaseDB.from("prices").delete().neq("stock_id", "00000000-0000-0000-0000-000000000000");
-      await supabaseDB.from("stocks").delete().eq("is_custom", true);
-    } catch (e) { console.warn("ล้างข้อมูลใน Supabase ไม่สำเร็จ", e); }
+      const a = dbOk(await supabaseDB.from("dividends").delete().neq("id", "00000000-0000-0000-0000-000000000000"), "dividends");
+      const b = dbOk(await supabaseDB.from("prices").delete().neq("stock_id", "00000000-0000-0000-0000-000000000000"), "prices");
+      const c = dbOk(await supabaseDB.from("stocks").delete().eq("is_custom", true), "stocks");
+      return a && b && c;
+    } catch (e) { return dbOk({ error: e }, "reset"); }
   }
   async function pushAllToSupabase() {
-    // อัปโหลดข้อมูลปัจจุบันในเบราว์เซอร์ทั้งหมดขึ้น Supabase — ใช้ตอน migrate ครั้งแรก หรือหลัง import backup
-    if (!isDbReady()) return;
+    // อัปโหลดข้อมูลในเครื่องทั้งหมดขึ้น Supabase — ปุ่ม "อัปโหลดข้อมูลในเครื่อง", ตอน DB ว่าง, หลัง import
+    if (!isDbReady()) return false;
+    syncErrors = []; showSync("กำลังอัปโหลด…");
     for (const s of getAllStocks()) await dbUpsertStock(s);
     for (const [ticker, p] of Object.entries(priceStore)) await dbUpsertPrice(ticker, p);
     for (const [ticker, rows] of Object.entries(dividendStore)) await dbReplaceDividendHistory(ticker, rows);
     if (symbolList) await dbUpsertSymbolCache(symbolList);
+    if (syncErrors.length) { showSync("⚠ อัปโหลดไม่สมบูรณ์: " + syncErrors[0], true); return false; }
+    setDirty(false); showSync("ซิงก์ล่าสุด " + new Date().toLocaleTimeString("th-TH"));
+    return true;
   }
   async function pullFromSupabase() {
-    // ดึงข้อมูลล่าสุดจาก Supabase มาแทนที่ state ในเบราว์เซอร์ — ทำให้เปิดจากอุปกรณ์ไหนก็เห็นข้อมูลตรงกัน
-    if (!isDbReady()) return false;
+    // ดึงข้อมูลจาก Supabase มาแทนที่ state ในเครื่อง — ถ้าเครื่องนี้มีข้อมูลที่ยังไม่ขึ้น DB จะถามก่อน ไม่ทับเงียบ ๆ
+    if (!isDbReady() || pulling) return false;
+    pulling = true;
     try {
-      const [{ data: stockRows }, { data: priceRows }, { data: divRows }] = await Promise.all([
+      syncErrors = []; showSync("กำลังดึงข้อมูล…");
+      const [s, p, d] = await Promise.all([
         supabaseDB.from("stocks").select("*"),
         supabaseDB.from("prices").select("price, data_date, source, source_url, fetched_at, verified, stocks(ticker)"),
         supabaseDB.from("dividends").select("fiscal_year, period, dps, currency, announce_date, xd_date, record_date, payment_date, announcement_id, source, source_url, fetched_at, data_date, verified, stocks(ticker)")
       ]);
-      if (!stockRows || !stockRows.length) return false; // DB ยังว่าง (ยังไม่เคย migrate ข้อมูลขึ้นเลย) — คงข้อมูล local ไว้ก่อน
-      const custom = stockRows.filter((s) => s.is_custom).map((s) => ({ ticker: s.ticker, nameTh: s.name_th, market: s.market, sector: s.sector, fallbackPrice: null }));
+      if (!dbOk(s, "stocks") || !dbOk(p, "prices") || !dbOk(d, "dividends")) return false;
+      const stockRows = s.data, priceRows = p.data, divRows = d.data;
+      if (!stockRows || !stockRows.length) return await pushAllToSupabase(); // DB ว่าง = migrate ข้อมูลในเครื่องขึ้นเป็นชุดแรก
+      if (isDirty()) {
+        if (confirm("เครื่องนี้มีข้อมูลที่ยังไม่ได้อัปโหลดขึ้นฐานข้อมูล\n\n[ตกลง] = อัปโหลดข้อมูลในเครื่องขึ้นไปทับฐานข้อมูล\n[ยกเลิก] = ดึงจากฐานข้อมูลมาทับข้อมูลในเครื่องนี้")) return await pushAllToSupabase();
+        setDirty(false);
+      }
+      const custom = stockRows.filter((r) => r.is_custom).map((r) => ({ ticker: r.ticker, nameTh: r.name_th, market: r.market, sector: r.sector, fallbackPrice: null }));
       const prices = {};
       (priceRows || []).forEach((row) => { if (row.stocks) prices[row.stocks.ticker] = { price: row.price, dataDate: row.data_date, source: row.source, sourceUrl: row.source_url, fetchedAt: row.fetched_at, verified: row.verified }; });
       const dividends = {};
@@ -786,11 +810,12 @@
           fetchedAt: row.fetched_at, dataDate: row.data_date, verified: row.verified
         });
       });
-      const state = cleanState({ customStocks: custom, dividends, prices }, []);
-      applyState(state);
+      applyState(cleanState({ customStocks: custom, dividends, prices }, []));
       refreshAfterStateChange();
+      setDirty(false); showSync("ซิงก์ล่าสุด " + new Date().toLocaleTimeString("th-TH"));
       return true;
-    } catch (e) { console.warn("ดึงข้อมูลจาก Supabase ไม่สำเร็จ", e); return false; }
+    } catch (e) { return dbOk({ error: e }, "pull"); }
+    finally { pulling = false; }
   }
   function updateAuthUI() {
     const bar = document.getElementById("authBar");
@@ -799,6 +824,7 @@
     bar.style.display = "flex";
     const statusEl = document.getElementById("authStatus");
     const btn = document.getElementById("authBtn");
+    const pb = document.getElementById("pushBtn"); if (pb) pb.style.display = supaUser ? "" : "none";
     if (supaUser) { statusEl.textContent = "ซิงก์: " + supaUser.email; btn.textContent = "ออกจากระบบ"; }
     else { statusEl.textContent = "ยังไม่เข้าสู่ระบบ (ข้อมูลจะไม่ซิงก์ข้ามอุปกรณ์)"; btn.textContent = "เข้าสู่ระบบ"; }
   }
@@ -1655,12 +1681,12 @@
     if (!confirm("การนำเข้าจะแทนที่ข้อมูลหุ้น/ปันผล/ราคาปัจจุบันทั้งหมดด้วยข้อมูลในไฟล์ ทำต่อหรือไม่?")) return;
     const saved = applyState(r.state);
     refreshAfterStateChange();
-    dbHardReset().then(pushAllToSupabase).catch((e) => console.warn("sync import ล้มเหลว", e));
+    dbHardReset().then((ok) => ok && pushAllToSupabase()).catch((e) => console.warn("sync import ล้มเหลว", e));
     showBackupMsg([saved ? "นำเข้าสำเร็จ" : "นำเข้าแล้ว แต่บันทึกลงเบราว์เซอร์ไม่สำเร็จ (พื้นที่เต็ม?)"], saved);
   });
 
   document.getElementById("resetStocksBtn").addEventListener("click", () => {
-    if (!confirm("Reset เฉพาะหุ้น: ลบหุ้นที่เพิ่มเอง ประวัติปันผลที่แก้ไข และราคาที่ดึงมา แล้วกลับเป็นข้อมูลตั้งต้น (เก็บรายชื่อหุ้นทั้งตลาดและตัวนับโควตา API ไว้) — ทำต่อหรือไม่?")) return;
+    if (!confirm(dbWarn() + "Reset เฉพาะหุ้น: ลบหุ้นที่เพิ่มเอง ประวัติปันผลที่แก้ไข และราคาที่ดึงมา แล้วกลับเป็นข้อมูลตั้งต้น (เก็บรายชื่อหุ้นทั้งตลาดและตัวนับโควตา API ไว้) — ทำต่อหรือไม่?")) return;
     applyState({ customStocks: [], dividends: {}, prices: {} });
     refreshAfterStateChange();
     dbHardReset().catch((e) => console.warn("sync reset ล้มเหลว", e));
@@ -1668,7 +1694,7 @@
   });
 
   document.getElementById("resetAllBtn").addEventListener("click", () => {
-    if (!confirm("Reset ทั้งหมด: ลบข้อมูลทุกอย่างที่แอปเก็บในเบราว์เซอร์นี้ (หุ้น ปันผล ราคา รายชื่อหุ้นทั้งตลาด ตัวนับโควตา API) — ทำต่อหรือไม่?")) return;
+    if (!confirm(dbWarn() + "Reset ทั้งหมด: ลบข้อมูลทุกอย่างที่แอปเก็บในเบราว์เซอร์นี้ (หุ้น ปันผล ราคา รายชื่อหุ้นทั้งตลาด ตัวนับโควตา API) — ทำต่อหรือไม่?")) return;
     [LS_DIV_KEY, LS_PRICE_KEY, LS_CUSTOM_KEY, LS_SYMBOLS_KEY, LS_CALLCOUNT_KEY].forEach((k) => { try { localStorage.removeItem(k); } catch (e) {} });
     symbolList = null;
     document.getElementById("symbolsStatus").textContent = "";
@@ -1695,6 +1721,10 @@
       if (!email || !email.trim()) return;
       const { error } = await supabaseDB.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: "https://nattapatk-create.github.io/thai-dividend-finder/" } });
       alert(error ? "ส่งลิงก์ไม่สำเร็จ: " + error.message : `ส่งลิงก์แล้ว เช็กอีเมล (${email.trim()}) แล้วกดลิงก์เพื่อเข้าสู่ระบบ`);
+    });
+    document.getElementById("pushBtn").addEventListener("click", async () => {
+      if (!supaUser || !confirm("อัปโหลดข้อมูลในเครื่องนี้ขึ้นฐานข้อมูลกลาง (ทับข้อมูลชุดเดียวกันที่มีอยู่) — ทำต่อหรือไม่?")) return;
+      alert((await pushAllToSupabase()) ? "อัปโหลดสำเร็จ" : "อัปโหลดไม่สมบูรณ์ — ดูข้อความสีแดงที่แถบด้านบน");
     });
     supabaseDB.auth.onAuthStateChange((_event, session) => {
       supaUser = session ? session.user : null;
