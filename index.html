@@ -679,7 +679,7 @@
      วิธีตั้งค่า: ใส่ Project URL และ anon public key จาก Supabase > Settings > API สองบรรทัดถัดไป
      ถ้ายังไม่ใส่ (ค่ายังเป็น YOUR_SUPABASE_...) แอปจะทำงานแบบ localStorage-only เหมือนเดิมทุกประการ ไม่พัง
      รูปแบบซิงก์: "pull ตอนโหลด/ล็อกอิน" + "push ทุกครั้งที่แก้ข้อมูล" — เห็นข้อมูลตรงกันข้ามอุปกรณ์ได้ ไม่ใช่ realtime */
-  const SUPABASE_URL = "https://qraahhvumntswxyqbyeg.supabase.co/rest/v1/";
+  const SUPABASE_URL = "https://qraahhvumntswxyqbyeg.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_wMq5QH6WeZyl31tLYSyjUw_3jpV09Y6";
   const supabaseDB = (typeof window.supabase !== "undefined" && /^https:\/\//i.test(SUPABASE_URL))
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
