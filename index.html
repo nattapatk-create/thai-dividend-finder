@@ -145,6 +145,7 @@
   .price-line button { padding:7px 12px; border:1px solid var(--teal); background:transparent; color:var(--teal); border-radius:4px; font-size:.79rem; cursor:pointer; transition: background .15s ease, color .15s ease; }
   .price-line button:hover { background:var(--teal); color:#0B1611; }
   .price-line .fetch-msg { color:var(--ink-faint); font-size:.76rem; }
+  .price-line .edit-manual-price { width:120px; padding:6px 8px; border:1px solid var(--line); border-radius:4px; background:var(--panel); color:var(--ink); font-size:.83rem; }
 
   .history-table { border-collapse:collapse; font-size:.82rem; width:100%; margin-top:8px; }
   .history-table caption { text-align:left; font-size:.76rem; color:var(--ink-faint); margin-bottom:6px; display:flex; justify-content:space-between; font-family: var(--sans); }
@@ -423,7 +424,7 @@
 <footer>
   <p><strong>เกี่ยวกับข้อมูล:</strong> ราคาหุ้นดึงจาก EODHD API จริงผ่าน proxy กลาง (แผนฟรีจำกัด 20 คำขอ/วัน เป็นราคาปิดของวันทำการล่าสุด ไม่ใช่ราคาระหว่างวันแบบเรียลไทม์) API key ของ EODHD ถูกเก็บไว้เป็นความลับที่ฝั่งเซิร์ฟเวอร์ของ proxy เท่านั้น ไม่เคยถูกส่งมาหรือเก็บไว้ในเบราว์เซอร์ของคุณ หากเรียก API ไม่สำเร็จ ระบบจะใช้ราคาสำรองแทนและระบุไว้ชัดเจนด้วยป้าย <span class="src-badge src-fallback" style="cursor:default;">FALLBACK</span><br>
   ประวัติเงินปันผลเป็น<strong>ตารางที่แก้ไขได้เอง</strong> — แถวที่ยังไม่ได้แก้จะมีป้าย <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> กำกับไว้เพราะเป็นข้อมูลตัวอย่าง ไม่ใช่ข้อมูลจริง กดที่ตัวเลขในตารางเพื่อแก้เป็นค่าจริงที่คุณเช็คมา (แถวจะเปลี่ยนเป็น "ยืนยันแล้ว") ระบบบันทึกอัตโนมัติในเบราว์เซอร์ของคุณ (localStorage) ไม่มีการส่งข้อมูลนี้ไปที่ใด</p>
-  <p style="margin-top:8px;"><strong>ความหมายของป้ายกำกับ:</strong> <span class="src-badge src-live" style="cursor:default;">LIVE</span> = ราคาจริงจาก API ล่าสุด (ภายใน 5 วัน) &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">STALE</span> = ราคาจริงแต่เก่าเกิน 5 วัน &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">FALLBACK</span> = ราคาสำรองฝังในโค้ด ไม่ใช่ราคาตลาด &nbsp;·&nbsp; <span class="src-badge src-none" style="cursor:default;">ไม่มีราคา</span> = ไม่มีข้อมูล/ดึงไม่สำเร็จ &nbsp;·&nbsp; <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> = ข้อมูลตัวอย่าง &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">ESTIMATED</span> = ค่าประมาณที่แอปเติมให้ &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">UNVERIFIED</span> = คุณกรอกเองแต่ยังไม่ระบุแหล่งอ้างอิง/ยังไม่ยืนยัน &nbsp;·&nbsp; <span class="src-badge src-live" style="cursor:default;">ยืนยันแล้ว</span> = มี URL แหล่งอ้างอิงและติ๊กยืนยันแล้ว<br>หุ้นที่ราคาไม่ใช่ LIVE ล่าสุด หรือมีปันผลเป็น SEED/ESTIMATED จะถูกติดป้าย "ไม่ใช่ข้อมูลจริง" จัดไว้ท้ายรายการ และไม่ผ่านการกรอง Yield</p>
+  <p style="margin-top:8px;"><strong>ความหมายของป้ายกำกับ:</strong> <span class="src-badge src-live" style="cursor:default;">LIVE</span> = ราคาจริงจาก API ล่าสุด (ภายใน 5 วัน) &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">STALE</span> = ราคาจริงแต่เก่าเกิน 5 วัน &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">MANUAL</span> = ราคาที่คุณกรอกเอง (ใช้เมื่อ EODHD ไม่มีข้อมูล) &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">FALLBACK</span> = ราคาสำรองฝังในโค้ด ไม่ใช่ราคาตลาด &nbsp;·&nbsp; <span class="src-badge src-none" style="cursor:default;">ไม่มีราคา</span> = ไม่มีข้อมูล/ดึงไม่สำเร็จ &nbsp;·&nbsp; <span class="src-badge src-seed" style="cursor:default;">SEED DATA</span> = ข้อมูลตัวอย่าง &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">ESTIMATED</span> = ค่าประมาณที่แอปเติมให้ &nbsp;·&nbsp; <span class="src-badge src-fallback" style="cursor:default;">UNVERIFIED</span> = คุณกรอกเองแต่ยังไม่ระบุแหล่งอ้างอิง/ยังไม่ยืนยัน &nbsp;·&nbsp; <span class="src-badge src-live" style="cursor:default;">ยืนยันแล้ว</span> = มี URL แหล่งอ้างอิงและติ๊กยืนยันแล้ว<br>หุ้นที่ราคาไม่ใช่ LIVE ล่าสุด หรือมีปันผลเป็น SEED/ESTIMATED จะถูกติดป้าย "ไม่ใช่ข้อมูลจริง" จัดไว้ท้ายรายการ และไม่ผ่านการกรอง Yield</p>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -785,7 +786,7 @@
       return dbOk(await supabaseDB.from("prices").upsert({
         stock_id: stockId, price: p.price, data_date: p.dataDate, source: p.source,
         source_url: p.sourceUrl, fetched_at: p.fetchedAt, verified: !!p.verified
-      }, { onConflict: "stock_id" }), "prices"); // prices เก็บแค่แถวล่าสุดต่อหุ้น (unique บน stock_id) — ประวัติลง price_history เองผ่าน trigger ฝั่ง DB (ดู supabase_migration.sql)
+      }), "prices"); // ประวัติราคาลง price_history เองผ่าน trigger ฝั่ง DB (ดู supabase_migration.sql)
     } catch (e) { return dbOk({ error: e }, "prices"); }
   }
   const dbDivRow = (r) => ({
@@ -1316,6 +1317,11 @@
   function priceInfoFrom(stock, rec, nowMs) {
     if (rec && typeof rec.price === "number" && rec.price > 0) {
       const age = (nowMs - Date.parse(rec.dataDate + "T00:00:00Z")) / 864e5;
+      // source "manual" = ผู้ใช้กรอกราคาเอง (เช่น ticker ที่ EODHD ไม่มีข้อมูล) — ไม่ถือว่า LIVE ไม่ว่าจะเพิ่งกรอกหรือกรอกมานานแล้ว
+      if (rec.source === "manual") {
+        return { price: rec.price, source: "manual", src: rec.source, status: "manual", date: rec.dataDate, dataDate: rec.dataDate,
+          fetchedAt: rec.fetchedAt, sourceUrl: rec.sourceUrl, verified: !!rec.verified, ageDays: Math.max(0, Math.floor(age)), noPrice: false };
+      }
       return { price: rec.price, source: "live", src: rec.source, status: age > FRESH_PRICE_DAYS ? "stale" : "fresh", date: rec.dataDate, dataDate: rec.dataDate,
         fetchedAt: rec.fetchedAt, sourceUrl: rec.sourceUrl, verified: !!rec.verified, ageDays: Math.max(0, Math.floor(age)), noPrice: false };
     }
@@ -1323,12 +1329,21 @@
     if (typeof stock.fallbackPrice === "number") return { ...base, price: stock.fallbackPrice, source: "fallback", src: "seed", status: "fallback", noPrice: false };
     return { ...base, price: 0, source: "none", src: null, status: "error", noPrice: true };
   }
+  // บันทึกราคาที่ผู้ใช้กรอกเอง (สำหรับ ticker ที่ดึงราคาสดจาก EODHD ไม่ได้) — เก็บ source: "manual" แยกจาก "market-data" (LIVE) ชัดเจน
+  function setManualPrice(ticker, price) {
+    if (!Number.isFinite(price) || price <= 0) return false;
+    priceStore[ticker] = { price, dataDate: todayStr(), source: "manual", fetchedAt: new Date().toISOString(), sourceUrl: null, verified: false };
+    saveJson(LS_PRICE_KEY, priceStore);
+    dbUpsertPrice(ticker, priceStore[ticker]);
+    return true;
+  }
   function getCurrentPrice(stock) { return priceInfoFrom(stock, priceStore[stock.ticker], Date.now()); }
 
   function priceSourceBadge(p) {
     const tip = escapeHtml(`แหล่ง: ${p.src || "ไม่มี"} | ข้อมูล ณ ${p.dataDate || "ไม่ทราบ"} | ดึงเมื่อ ${fmtTs(p.fetchedAt)}`);
     if (p.status === "fresh") return `<span class="src-badge src-live" title="${tip}">LIVE</span>`;
     if (p.status === "stale") return `<span class="src-badge src-fallback" title="${tip} — ราคาเก่าเกิน ${FRESH_PRICE_DAYS} วัน">STALE</span>`;
+    if (p.status === "manual") return `<span class="src-badge src-fallback" title="${tip} — ผู้ใช้กรอกเอง ไม่ใช่ราคาสดจากตลาด">MANUAL</span>`;
     if (p.status === "fallback") return `<span class="src-badge src-fallback" title="ราคาสำรองฝังในโค้ด ไม่ใช่ราคาตลาด — ดึงราคาจริงเพื่อแทนที่">FALLBACK</span>`;
     return `<span class="src-badge src-none" title="ยังไม่มีราคาสำหรับหุ้นนี้ (ไม่มีข้อมูล/ดึงไม่สำเร็จ)">ไม่มีราคา</span>`;
   }
@@ -1356,6 +1371,7 @@
     const incompl = incompleteYears(history);
     const warnings = [];
     if (priceInfo.status === "fallback") warnings.push("ราคาเป็นค่าสำรอง (FALLBACK) ที่ฝังในโค้ด — ไม่ใช่ราคาตลาด");
+    else if (priceInfo.status === "manual") warnings.push(`ราคาเป็นค่าที่กรอกเอง (MANUAL) ณ ${priceInfo.dataDate} — ไม่ใช่ราคาสดจากตลาด ควรอัปเดตเป็นระยะ`);
     else if (priceInfo.status === "stale") warnings.push(`ราคาเก่า (STALE): ข้อมูล ณ ${priceInfo.dataDate} (${priceInfo.ageDays} วันก่อน)`);
     else if (priceInfo.status === "error") warnings.push("ไม่มีข้อมูลราคา");
     if (!history.length) warnings.push("ยังไม่มีประวัติปันผล");
@@ -1611,6 +1627,7 @@
     const priceLabelCls = p.status === "fresh" ? "" : "stale";
     const fetchMsg = p.status === "fresh" ? `ราคาปิดล่าสุด ${escapeHtml(p.dataDate)} (LIVE จาก EODHD)`
       : p.status === "stale" ? `ราคาเก่า (STALE) ข้อมูล ณ ${escapeHtml(p.dataDate)} — กดปุ่มด้านซ้ายเพื่อดึงราคาใหม่`
+      : p.status === "manual" ? `ใช้ราคาที่กรอกเอง (MANUAL) ณ ${escapeHtml(p.dataDate)} — ลองกด "ดึงราคาจริงจาก EODHD" อีกครั้งเป็นระยะ เผื่อมีข้อมูลแล้ว`
       : p.status === "fallback" ? "กำลังแสดงราคาสำรอง (FALLBACK) ไม่ใช่ราคาจริง — กดปุ่มด้านซ้ายเพื่อดึงราคาจริง"
       : "ไม่มีราคาสำหรับหุ้นนี้เลย — กดปุ่มด้านซ้ายเพื่อดึงราคาจริงจาก EODHD";
     const warningBanner = q.warnings.length
@@ -1658,6 +1675,11 @@
         <div class="price-line">
           <button type="button" data-fetch="${safeTicker}">ดึงราคาจริงจาก EODHD</button>
           <span class="fetch-msg" id="fetchmsg-${safeTicker}">${fetchMsg}</span>
+        </div>
+        <div class="price-line manual-price-line">
+          <input type="number" step="0.01" min="0.01" class="edit-manual-price" id="manualprice-${safeTicker}" placeholder="กรอกราคาเอง (บาท)" value="${p.source === "manual" ? escapeHtml(p.price) : ""}">
+          <button type="button" data-savemanual="${safeTicker}">บันทึกราคาที่กรอกเอง</button>
+          <span class="fetch-msg" id="manualmsg-${safeTicker}">ใช้เมื่อ EODHD ไม่มีข้อมูลราคาของหุ้นนี้ — ราคาจะติดป้าย MANUAL ไม่ใช่ LIVE</span>
         </div>
         ${provenanceHtml(p, "ราคา")}
         <table class="history-table">
@@ -1750,6 +1772,7 @@
     const toggleEl = e.target.closest("[data-toggle]");
     const useEl = e.target.closest("[data-use]");
     const fetchEl = e.target.closest("[data-fetch]");
+    const saveManualEl = e.target.closest("[data-savemanual]");
     const addRowEl = e.target.closest("[data-addrow]");
     const resetEl = e.target.closest("[data-reset]");
     const delEl = e.target.closest("[data-del]");
@@ -1762,7 +1785,27 @@
     if (fetchEl) {
       const ticker = fetchEl.getAttribute("data-fetch");
       const msgEl = document.getElementById(`fetchmsg-${ticker}`);
-      await fetchPrice(ticker, msgEl);
+      openTicker = ticker;
+      const price = await fetchPrice(ticker, msgEl);
+      // ดึงสำเร็จ (price ไม่ null) เท่านั้นถึง re-render ทั้งแถว — ถ้าดึงไม่สำเร็จ ต้อง "ไม่" re-render
+      // เพราะ renderList() จะสร้าง fetchMsg ใหม่จากสถานะราคาปัจจุบัน (ซึ่งยังไม่เปลี่ยน) ทับข้อความ error ที่ fetchPrice
+      // เพิ่งเขียนไว้ใน msgEl ทันที ทำให้ผู้ใช้ไม่มีทางเห็นสาเหตุที่แท้จริง (เช่น HTTP 404 / หมดโควตา / CORS)
+      if (price !== null) {
+        renderList();
+        document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
+      }
+      return;
+    }
+    if (saveManualEl) {
+      const ticker = saveManualEl.getAttribute("data-savemanual");
+      const inputEl = document.getElementById(`manualprice-${ticker}`);
+      const msgEl = document.getElementById(`manualmsg-${ticker}`);
+      const price = Number(inputEl.value);
+      if (!Number.isFinite(price) || price <= 0) {
+        msgEl.textContent = "กรอกราคาให้ถูกต้อง (มากกว่า 0)";
+        return;
+      }
+      setManualPrice(ticker, price);
       renderList();
       openTicker = ticker;
       document.querySelector(`.stock-row[data-ticker="${ticker}"]`)?.classList.add("open");
@@ -2010,7 +2053,7 @@
 
   // เปิดให้ชุดทดสอบ (เปิดหน้าด้วย ?test) เรียกใช้ฟังก์ชันล้วนได้ — ไม่มีฟังก์ชันไหนในนี้แก้ข้อมูลจริงของผู้ใช้
   window.TDF = { APP_ID, SCHEMA_VERSION, TAX_RATE, RAW_STOCKS, calcPosition, computeYieldPct, computeAnnualSeries, computeGrowth, computeGrowthStreak,
-    computeLatestDividend, computeTTMDividend, incompleteYears, rowKind, rowKeys, PERIODS, validateDividendRow, computeAvgDividend, getCurrentPrice, priceInfoFrom, divRowStatus, assessData, passesScreen, SOURCES, STATUSES, buildBackup, parseBackup, loadAllState, cleanSymbolCache };
+    computeLatestDividend, computeTTMDividend, incompleteYears, rowKind, rowKeys, PERIODS, validateDividendRow, computeAvgDividend, getCurrentPrice, priceInfoFrom, setManualPrice, divRowStatus, assessData, passesScreen, SOURCES, STATUSES, buildBackup, parseBackup, loadAllState, cleanSymbolCache };
   // เปิดฟังก์ชันซิงก์กับ Supabase ให้เรียกจาก browser console ได้ (เช่น TDF.pushAllToSupabase() ตอน migrate ข้อมูลเก่าครั้งแรก)
   window.TDF.pushAllToSupabase = pushAllToSupabase;
   window.TDF.pullFromSupabase = pullFromSupabase;
@@ -2213,6 +2256,11 @@
     eq(T.priceInfoFrom(stk, rec(10), nowMs).status, "stale");
     const f = T.priceInfoFrom(stk, undefined, nowMs); eq(f.status, "fallback"); eq(f.src, "seed"); eq(f.verified, false); eq(f.dataDate, null);
     const e = T.priceInfoFrom({ ticker: "T2", fallbackPrice: null }, undefined, nowMs); eq(e.status, "error"); eq(e.noPrice, true);
+  });
+  test("สถานะราคา: source manual = manual เสมอ (แม้เพิ่งบันทึกวันนี้ ไม่ถือว่า LIVE)", () => {
+    const m = T.priceInfoFrom(stk, { price: 78, dataDate: daysAgo(0), source: "manual", fetchedAt: new Date().toISOString(), sourceUrl: null, verified: false }, nowMs);
+    eq(m.status, "manual"); eq(m.src, "manual"); eq(m.noPrice, false);
+    eq(T.assessData(m, []).reliable, false);
   });
   const vrow = (o) => ({ ...row(2024, 1), ...o });
   test("สถานะปันผลรายแถว: seed→fallback, estimated/ยังไม่ยืนยัน→unverified, ยืนยัน→fresh, ยืนยันเกิน 1 ปี→stale", () => {
