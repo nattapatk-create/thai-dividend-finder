@@ -221,6 +221,8 @@
     <nav class="tabs" id="navTabs" role="tablist" aria-label="เมนูหลัก">
       <button type="button" data-tab="stocks" class="active" role="tab" aria-selected="true">รายชื่อหุ้น</button>
       <button type="button" data-tab="calculator" role="tab" aria-selected="false">เครื่องคำนวณ</button>
+      <button type="button" data-tab="portfolio" role="tab" aria-selected="false">พอร์ตของฉัน</button>
+      <button type="button" data-tab="reports" role="tab" aria-selected="false">รายงานย้อนหลัง</button>
     </nav>
     <div class="auth-bar" id="authBar" style="display:none; align-items:center; gap:8px; font-size:.78rem; color:var(--ink-soft);">
       <span id="authStatus"></span>
@@ -365,6 +367,55 @@
           <div class="tax-note">ตามประมวลรัษฎากร เงินปันผลจากหุ้นสามัญที่จ่ายให้ผู้ถือหุ้นบุคคลธรรมดาถูกหักภาษี ณ ที่จ่ายในอัตรา 10% — สูตร: เงินปันผลสุทธิ = เงินปันผลรวม × (1 − 0.10), Yield ส่วนตัว = (เงินปันผลสุทธิ ÷ เงินลงทุน) × 100</div>
         </div>
       </div>
+    </section>
+  </div>
+
+  <div class="view" id="viewPortfolio">
+    <section class="card" id="portfolioSection">
+      <h2 class="section-title">ตำแหน่งการถือครอง <span class="section-hint">จำนวนหุ้น/ต้นทุนเฉลี่ยที่ถืออยู่จริง — ซิงก์ขึ้น Supabase (ตาราง portfolio_positions) เมื่อล็อกอิน</span></h2>
+      <div id="portfolioWarn" class="data-warning" style="display:none;">ยังไม่ได้เข้าสู่ระบบ — ข้อมูลพอร์ตจะเก็บไว้ในเครื่องนี้เท่านั้น ไม่ซิงก์ข้ามอุปกรณ์</div>
+      <div id="portfolioTable"></div>
+      <div class="btn-group" style="margin-top:10px;">
+        <select id="posTicker" class="ctrl"></select>
+        <input id="posShares" type="number" min="0" step="100" placeholder="จำนวนหุ้น" style="width:120px;">
+        <input id="posCost" type="number" min="0" step="0.01" placeholder="ต้นทุนเฉลี่ย/หุ้น" style="width:140px;">
+        <button id="addPositionBtn" class="btn primary" type="button">บันทึกตำแหน่ง</button>
+      </div>
+    </section>
+
+    <section class="card" id="transactionSection">
+      <h2 class="section-title">บันทึกการซื้อขาย <span class="section-hint">ทุกรายการจะซิงก์ขึ้นตาราง transactions และมี audit trail อัตโนมัติฝั่งฐานข้อมูล</span></h2>
+      <div class="btn-group">
+        <select id="txTicker" class="ctrl"></select>
+        <select id="txType" class="ctrl"><option value="buy">ซื้อ</option><option value="sell">ขาย</option></select>
+        <input id="txShares" type="number" min="1" step="100" placeholder="จำนวนหุ้น" style="width:120px;">
+        <input id="txPrice" type="number" min="0" step="0.01" placeholder="ราคา/หุ้น" style="width:120px;">
+        <input id="txDate" type="date" style="width:150px;">
+        <button id="addTxBtn" class="btn primary" type="button">บันทึกรายการ</button>
+      </div>
+      <div id="txTable" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="card" id="alertsSection">
+      <h2 class="section-title">แจ้งเตือนราคา <span class="section-hint">ตรวจกับราคาล่าสุดที่ดึงไว้ในเครื่องนี้ (ไม่ใช่แบบเรียลไทม์)</span></h2>
+      <div class="btn-group">
+        <select id="alertTicker" class="ctrl"></select>
+        <select id="alertCond" class="ctrl"><option value="lte">ราคา ≤</option><option value="gte">ราคา ≥</option></select>
+        <input id="alertThreshold" type="number" min="0" step="0.01" placeholder="ราคาเป้าหมาย" style="width:130px;">
+        <button id="addAlertBtn" class="btn primary" type="button">ตั้งแจ้งเตือน</button>
+      </div>
+      <div id="alertsTable" style="margin-top:12px;"></div>
+    </section>
+  </div>
+
+  <div class="view" id="viewReports">
+    <section class="card" id="reportsSection">
+      <h2 class="section-title">รายงานย้อนหลัง <span class="section-hint">อ่านอย่างเดียว — เขียนโดย daily job ภายนอก หรือ Claude ผ่านตาราง daily_reports/job_runs ใน Supabase</span></h2>
+      <div id="reportsWarn" class="data-warning" style="display:none;">ต้องเข้าสู่ระบบ Supabase ก่อนจึงจะดึงรายงานย้อนหลังได้</div>
+      <button id="refreshReportsBtn" class="btn" type="button">โหลดรายงานล่าสุด</button>
+      <div id="reportsTable" style="margin-top:12px;"></div>
+      <h3 class="section-title" style="margin-top:20px;">ประวัติการรัน daily job <span class="section-hint">job_runs — สถานะ/เวลาที่รันล่าสุด</span></h3>
+      <div id="jobRunsTable" style="margin-top:8px;"></div>
     </section>
   </div>
 </main>
@@ -734,7 +785,7 @@
       return dbOk(await supabaseDB.from("prices").upsert({
         stock_id: stockId, price: p.price, data_date: p.dataDate, source: p.source,
         source_url: p.sourceUrl, fetched_at: p.fetchedAt, verified: !!p.verified
-      }), "prices"); // ประวัติราคาลง price_history เองผ่าน trigger ฝั่ง DB (ดู supabase_migration.sql)
+      }, { onConflict: "stock_id" }), "prices"); // prices เก็บแค่แถวล่าสุดต่อหุ้น (unique บน stock_id) — ประวัติลง price_history เองผ่าน trigger ฝั่ง DB (ดู supabase_migration.sql)
     } catch (e) { return dbOk({ error: e }, "prices"); }
   }
   const dbDivRow = (r) => ({
@@ -827,6 +878,253 @@
     const pb = document.getElementById("pushBtn"); if (pb) pb.style.display = supaUser ? "" : "none";
     if (supaUser) { statusEl.textContent = "ซิงก์: " + supaUser.email; btn.textContent = "ออกจากระบบ"; }
     else { statusEl.textContent = "ยังไม่เข้าสู่ระบบ (ข้อมูลจะไม่ซิงก์ข้ามอุปกรณ์)"; btn.textContent = "เข้าสู่ระบบ"; }
+  }
+
+  /* ============ 3z. พอร์ต / รายการซื้อขาย / แจ้งเตือน (portfolio_positions, transactions, alerts) ============
+     เก็บ local-first ใน localStorage เหมือนข้อมูลอื่น ๆ แล้วซิงก์ขึ้น Supabase เมื่อล็อกอิน ตาม pattern เดียวกับ dbUpsertStock ฯลฯ
+     โครงสร้างตารางเหล่านี้มีอยู่แล้วจริงใน Supabase (สร้างไว้ก่อนหน้า พร้อม audit trigger บน stocks/prices/dividends/portfolio_positions/transactions
+     — ยกเว้น alerts ที่ยังไม่มี trigger) โค้ดด้านล่างเรียกตามชื่อคอลัมน์จริง ไม่ใช่ชื่อที่ตั้งเอง:
+       portfolio_positions: quantity, avg_cost, currency, unique(user_id, stock_id)
+       transactions: type, quantity, price, fee, txn_date, notes — ไม่มี unique key ฝั่ง client จึงต้องเก็บ id ที่ DB คืนมาไว้ในเครื่องเพื่อลบภายหลัง
+       alerts: alert_type, condition (jsonb: {cond, threshold}), status — ไม่มี unique key เช่นกัน เก็บ id ที่ DB คืนมาเหมือนกัน */
+  const LS_POSITIONS_KEY = "tdf_positions_v1";
+  const LS_TX_KEY = "tdf_transactions_v1";
+  const LS_ALERTS_KEY = "tdf_alerts_v1";
+  let positionStore = loadJson(LS_POSITIONS_KEY, {});   // { ticker: { shares, avgCost, updatedAt } } — ชื่อฟิลด์ในเครื่องคงเดิม, แม็ปตอนคุยกับ DB
+  let txStore = loadJson(LS_TX_KEY, []);                // [{ id (local), dbId (uuid จริงหลังซิงก์), ticker, type, shares, price, txDate, createdAt }]
+  let alertStore = loadJson(LS_ALERTS_KEY, []);          // [{ id (local), dbId, ticker, cond, threshold, createdAt }]
+  const uid = () => (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+
+  async function dbUpsertPosition(ticker, pos) {
+    if (!isDbReady()) return false;
+    try {
+      const stockId = await dbGetStockId(ticker) || (await dbUpsertStock({ ticker, nameTh: ticker }), await dbGetStockId(ticker));
+      if (!stockId) return false;
+      return dbOk(await supabaseDB.from("portfolio_positions").upsert(
+        { stock_id: stockId, quantity: pos.shares, avg_cost: pos.avgCost, currency: "THB", updated_at: pos.updatedAt },
+        { onConflict: "user_id,stock_id" }), "portfolio");
+    } catch (e) { return dbOk({ error: e }, "portfolio"); }
+  }
+  async function dbDeletePosition(ticker) {
+    if (!isDbReady()) return false;
+    try {
+      const stockId = await dbGetStockId(ticker);
+      if (!stockId) return true;
+      return dbOk(await supabaseDB.from("portfolio_positions").delete().eq("stock_id", stockId), "portfolio");
+    } catch (e) { return dbOk({ error: e }, "portfolio"); }
+  }
+  async function dbInsertTransaction(tx) {
+    // ไม่มี unique key ฝั่ง client ในตารางจริง — insert แล้วคืน id ที่ DB สร้างให้ เพื่อเก็บไว้ใช้ลบภายหลัง
+    if (!isDbReady()) return null;
+    try {
+      const stockId = await dbGetStockId(tx.ticker) || (await dbUpsertStock({ ticker: tx.ticker, nameTh: tx.ticker }), await dbGetStockId(tx.ticker));
+      if (!stockId) return null;
+      const res = await supabaseDB.from("transactions").insert(
+        { stock_id: stockId, type: tx.type, quantity: tx.shares, price: tx.price, fee: 0, txn_date: tx.txDate }).select("id").single();
+      return dbOk(res, "transactions") && res.data ? res.data.id : null;
+    } catch (e) { dbOk({ error: e }, "transactions"); return null; }
+  }
+  async function dbDeleteTransaction(dbId) {
+    if (!dbId || !isDbReady()) return false;
+    return dbOk(await supabaseDB.from("transactions").delete().eq("id", dbId), "transactions");
+  }
+  async function dbUpsertAlert(a) {
+    // ไม่มี unique key ฝั่ง client ในตารางจริง — insert แล้วคืน id ที่ DB สร้างให้
+    if (!isDbReady()) return null;
+    try {
+      const stockId = await dbGetStockId(a.ticker) || (await dbUpsertStock({ ticker: a.ticker, nameTh: a.ticker }), await dbGetStockId(a.ticker));
+      if (!stockId) return null;
+      const res = await supabaseDB.from("alerts").insert(
+        { stock_id: stockId, alert_type: "price", condition: { cond: a.cond, threshold: a.threshold }, status: "active" }).select("id").single();
+      return dbOk(res, "alerts") && res.data ? res.data.id : null;
+    } catch (e) { dbOk({ error: e }, "alerts"); return null; }
+  }
+  async function dbDeleteAlert(dbId) {
+    if (!dbId || !isDbReady()) return false;
+    return dbOk(await supabaseDB.from("alerts").delete().eq("id", dbId), "alerts");
+  }
+  async function dbFetchDailyReports() {
+    if (!supabaseDB) return [];
+    const res = await supabaseDB.from("daily_reports").select("*").order("report_date", { ascending: false }).limit(30);
+    return dbOk(res, "daily_reports") && res.data ? res.data : [];
+  }
+  async function dbFetchJobRuns() {
+    if (!supabaseDB) return [];
+    const res = await supabaseDB.from("job_runs").select("*").order("started_at", { ascending: false }).limit(20);
+    return dbOk(res, "job_runs") && res.data ? res.data : [];
+  }
+
+  function savePositions() { saveJson(LS_POSITIONS_KEY, positionStore); }
+  function saveTx() { saveJson(LS_TX_KEY, txStore); }
+  function saveAlerts() { saveJson(LS_ALERTS_KEY, alertStore); }
+
+  function upsertPosition(ticker, shares, avgCost) {
+    positionStore[ticker] = { shares, avgCost, updatedAt: new Date().toISOString() };
+    savePositions();
+    dbUpsertPosition(ticker, positionStore[ticker]);
+  }
+  function deletePosition(ticker) {
+    delete positionStore[ticker];
+    savePositions();
+    dbDeletePosition(ticker);
+  }
+  function addTransaction(ticker, type, shares, price, txDate) {
+    const tx = { id: uid(), dbId: null, ticker, type, shares, price, txDate, createdAt: new Date().toISOString() };
+    txStore.push(tx);
+    saveTx();
+    dbInsertTransaction(tx).then((dbId) => { if (dbId) { tx.dbId = dbId; saveTx(); } });
+    // อัปเดตตำแหน่งอัตโนมัติจากรายการซื้อขาย: ซื้อ = ถัวเฉลี่ยต้นทุน, ขาย = ลดจำนวนหุ้น (ต้นทุนเฉลี่ยเดิมไม่เปลี่ยน)
+    const cur = positionStore[ticker] || { shares: 0, avgCost: 0 };
+    if (type === "buy") {
+      const newShares = cur.shares + shares;
+      const newCost = newShares > 0 ? ((cur.shares * cur.avgCost) + (shares * price)) / newShares : 0;
+      upsertPosition(ticker, newShares, newCost);
+    } else {
+      const newShares = Math.max(0, cur.shares - shares);
+      if (newShares === 0) deletePosition(ticker); else upsertPosition(ticker, newShares, cur.avgCost);
+    }
+    return tx;
+  }
+  function deleteTransaction(txId) {
+    const tx = txStore.find((t) => t.id === txId);
+    txStore = txStore.filter((t) => t.id !== txId);
+    saveTx();
+    if (tx && tx.dbId) dbDeleteTransaction(tx.dbId);
+  }
+  function addAlert(ticker, cond, threshold) {
+    const a = { id: uid(), dbId: null, ticker, cond, threshold, createdAt: new Date().toISOString() };
+    alertStore.push(a);
+    saveAlerts();
+    dbUpsertAlert(a).then((dbId) => { if (dbId) { a.dbId = dbId; saveAlerts(); } });
+    return a;
+  }
+  function deleteAlert(alertId) {
+    const a = alertStore.find((x) => x.id === alertId);
+    alertStore = alertStore.filter((x) => x.id !== alertId);
+    saveAlerts();
+    if (a && a.dbId) dbDeleteAlert(a.dbId);
+  }
+
+  function tickerOptionsHtml() {
+    return getAllStocks().map((s) => `<option value="${escapeHtml(s.ticker)}">${escapeHtml(s.ticker)} — ${escapeHtml(s.nameTh)}</option>`).join("");
+  }
+  function fmtNum(n, d) { return Number.isFinite(n) ? n.toLocaleString("th-TH", { minimumFractionDigits: d || 0, maximumFractionDigits: d || 2 }) : "–"; }
+
+  function renderPortfolioTable() {
+    const el = document.getElementById("portfolioTable");
+    if (!el) return;
+    document.getElementById("portfolioWarn").style.display = isDbReady() ? "none" : "block";
+    const rows = Object.entries(positionStore);
+    if (!rows.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีตำแหน่งที่บันทึกไว้</div>'; return; }
+    let totalCost = 0, totalValue = 0;
+    const trs = rows.map(([ticker, pos]) => {
+      const stockObj = getAllStocks().find((s) => s.ticker === ticker) || { ticker, fallbackPrice: null };
+      const price = getCurrentPrice(stockObj);
+      const curPrice = price && price.price ? price.price : null;
+      const cost = pos.shares * pos.avgCost;
+      const value = curPrice ? pos.shares * curPrice : null;
+      totalCost += cost; if (value != null) totalValue += value;
+      const pnl = value != null ? value - cost : null;
+      const pnlPct = value != null && cost > 0 ? (pnl / cost) * 100 : null;
+      return `<tr><td>${escapeHtml(ticker)}</td><td class="num">${fmtNum(pos.shares)}</td><td class="num">${fmtNum(pos.avgCost, 2)}</td>
+        <td class="num">${curPrice != null ? fmtNum(curPrice, 2) : "–"}</td><td class="num">${fmtNum(cost, 2)}</td>
+        <td class="num">${value != null ? fmtNum(value, 2) : "–"}</td>
+        <td class="num" style="color:${pnl == null ? '' : pnl >= 0 ? 'var(--teal)' : 'var(--red)'}">${pnl != null ? fmtNum(pnl, 2) + " (" + fmtNum(pnlPct, 1) + "%)" : "–"}</td>
+        <td><button type="button" class="btn danger" data-del-pos="${escapeHtml(ticker)}">ลบ</button></td></tr>`;
+    }).join("");
+    el.innerHTML = `<table class="history-table"><thead><tr><th>Ticker</th><th>จำนวนหุ้น</th><th>ต้นทุนเฉลี่ย</th><th>ราคาล่าสุด</th><th>ต้นทุนรวม</th><th>มูลค่าปัจจุบัน</th><th>กำไร/ขาดทุน</th><th></th></tr></thead>
+      <tbody>${trs}</tbody><tfoot><tr><td colspan="4"><strong>รวม</strong></td><td class="num"><strong>${fmtNum(totalCost, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue - totalCost, 2)}</strong></td><td></td></tr></tfoot></table>`;
+    el.querySelectorAll("[data-del-pos]").forEach((b) => b.addEventListener("click", () => {
+      if (confirm(dbWarn() + `ลบตำแหน่ง ${b.getAttribute("data-del-pos")} หรือไม่?`)) { deletePosition(b.getAttribute("data-del-pos")); renderPortfolioTable(); }
+    }));
+  }
+  function renderTxTable() {
+    const el = document.getElementById("txTable");
+    if (!el) return;
+    if (!txStore.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีรายการซื้อขาย</div>'; return; }
+    const rows = [...txStore].sort((a, b) => (b.txDate || "").localeCompare(a.txDate || ""));
+    el.innerHTML = `<table class="history-table"><thead><tr><th>วันที่</th><th>Ticker</th><th>ประเภท</th><th>จำนวนหุ้น</th><th>ราคา</th><th>มูลค่า</th><th></th></tr></thead>
+      <tbody>${rows.map((t) => `<tr><td>${escapeHtml(t.txDate || "–")}</td><td>${escapeHtml(t.ticker)}</td><td>${t.type === "buy" ? "ซื้อ" : "ขาย"}</td>
+        <td class="num">${fmtNum(t.shares)}</td><td class="num">${fmtNum(t.price, 2)}</td><td class="num">${fmtNum(t.shares * t.price, 2)}</td>
+        <td><button type="button" class="btn danger" data-del-tx="${escapeHtml(t.id)}">ลบ</button></td></tr>`).join("")}</tbody></table>`;
+    el.querySelectorAll("[data-del-tx]").forEach((b) => b.addEventListener("click", () => {
+      if (confirm("ลบรายการนี้หรือไม่? (จะไม่ปรับยอดตำแหน่งย้อนหลังให้อัตโนมัติ)")) { deleteTransaction(b.getAttribute("data-del-tx")); renderTxTable(); }
+    }));
+  }
+  function renderAlertsTable() {
+    const el = document.getElementById("alertsTable");
+    if (!el) return;
+    if (!alertStore.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีการตั้งแจ้งเตือน</div>'; return; }
+    el.innerHTML = `<table class="history-table"><thead><tr><th>Ticker</th><th>เงื่อนไข</th><th>ราคาเป้าหมาย</th><th>ราคาล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
+      <tbody>${alertStore.map((a) => {
+        const stockObj = getAllStocks().find((s) => s.ticker === a.ticker) || { ticker: a.ticker, fallbackPrice: null };
+        const price = getCurrentPrice(stockObj);
+        const cur = price && price.price ? price.price : null;
+        const hit = cur != null && (a.cond === "lte" ? cur <= a.threshold : cur >= a.threshold);
+        return `<tr><td>${escapeHtml(a.ticker)}</td><td>${a.cond === "lte" ? "≤" : "≥"}</td><td class="num">${fmtNum(a.threshold, 2)}</td>
+          <td class="num">${cur != null ? fmtNum(cur, 2) : "–"}</td><td style="color:${hit ? 'var(--gold)' : 'var(--ink-faint)'}">${hit ? "ถึงเป้าแล้ว ⚠" : "ยังไม่ถึง"}</td>
+          <td><button type="button" class="btn danger" data-del-alert="${escapeHtml(a.id)}">ลบ</button></td></tr>`;
+      }).join("")}</tbody></table>`;
+    el.querySelectorAll("[data-del-alert]").forEach((b) => b.addEventListener("click", () => { deleteAlert(b.getAttribute("data-del-alert")); renderAlertsTable(); }));
+  }
+  function renderPortfolioViews() {
+    ["posTicker", "txTicker", "alertTicker"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) { const keep = el.value; el.innerHTML = tickerOptionsHtml(); if (keep) el.value = keep; }
+    });
+    renderPortfolioTable(); renderTxTable(); renderAlertsTable();
+  }
+  function bindPortfolioEvents() {
+    document.getElementById("addPositionBtn").addEventListener("click", () => {
+      const ticker = document.getElementById("posTicker").value;
+      const shares = parseFloat(document.getElementById("posShares").value);
+      const cost = parseFloat(document.getElementById("posCost").value);
+      if (!ticker || !Number.isFinite(shares) || shares < 0 || !Number.isFinite(cost) || cost < 0) { alert("กรอกจำนวนหุ้นและต้นทุนเฉลี่ยให้ถูกต้อง"); return; }
+      upsertPosition(ticker, shares, cost); renderPortfolioTable();
+      document.getElementById("posShares").value = ""; document.getElementById("posCost").value = "";
+    });
+    document.getElementById("addTxBtn").addEventListener("click", () => {
+      const ticker = document.getElementById("txTicker").value;
+      const type = document.getElementById("txType").value;
+      const shares = parseFloat(document.getElementById("txShares").value);
+      const price = parseFloat(document.getElementById("txPrice").value);
+      const txDate = document.getElementById("txDate").value || todayStr();
+      if (!ticker || !Number.isFinite(shares) || shares <= 0 || !Number.isFinite(price) || price < 0) { alert("กรอกจำนวนหุ้นและราคาให้ถูกต้อง"); return; }
+      addTransaction(ticker, type, shares, price, txDate);
+      renderTxTable(); renderPortfolioTable();
+      document.getElementById("txShares").value = ""; document.getElementById("txPrice").value = "";
+    });
+    document.getElementById("addAlertBtn").addEventListener("click", () => {
+      const ticker = document.getElementById("alertTicker").value;
+      const cond = document.getElementById("alertCond").value;
+      const threshold = parseFloat(document.getElementById("alertThreshold").value);
+      if (!ticker || !Number.isFinite(threshold) || threshold < 0) { alert("กรอกราคาเป้าหมายให้ถูกต้อง"); return; }
+      addAlert(ticker, cond, threshold); renderAlertsTable();
+      document.getElementById("alertThreshold").value = "";
+    });
+  }
+
+  /* ---- รายงานย้อนหลัง (daily_reports) และประวัติการรัน daily job (job_runs) — อ่านอย่างเดียวจาก Supabase ---- */
+  async function loadReportsAndJobRuns() {
+    const reportsWarn = document.getElementById("reportsWarn");
+    if (!supabaseDB) { reportsWarn.style.display = "block"; reportsWarn.textContent = "ยังไม่ได้ตั้งค่า Supabase ในแอปนี้"; return; }
+    reportsWarn.style.display = "none";
+    const [reports, runs] = await Promise.all([dbFetchDailyReports(), dbFetchJobRuns()]);
+    const rEl = document.getElementById("reportsTable");
+    rEl.innerHTML = reports.length
+      ? `<table class="history-table"><thead><tr><th>วันที่</th><th>ประเภทรายงาน</th><th>สรุป</th><th>สร้างเมื่อ</th></tr></thead><tbody>${
+          reports.map((r) => `<tr><td>${escapeHtml(r.report_date || "–")}</td><td>${escapeHtml(r.report_type || "–")}</td><td>${escapeHtml(typeof r.payload === "string" ? r.payload : JSON.stringify(r.payload || {}))}</td><td>${escapeHtml(r.created_at || "–")}</td></tr>`).join("")
+        }</tbody></table>`
+      : '<div class="empty-state">ยังไม่มีรายงาน (รอ daily job เขียนลงตาราง daily_reports)</div>';
+    const jEl = document.getElementById("jobRunsTable");
+    jEl.innerHTML = runs.length
+      ? `<table class="history-table"><thead><tr><th>งาน</th><th>เริ่ม</th><th>เสร็จ</th><th>สถานะ</th><th>เรียก API</th><th>รายละเอียด</th></tr></thead><tbody>${
+          runs.map((j) => `<tr><td>${escapeHtml(j.job_name || "–")}</td><td>${escapeHtml(j.started_at || "–")}</td><td>${escapeHtml(j.finished_at || "–")}</td>
+            <td style="color:${j.status === "success" ? "var(--teal)" : j.status === "error" ? "var(--red)" : "var(--ink-soft)"}">${escapeHtml(j.status || "–")}</td>
+            <td class="num">${Number.isFinite(j.api_calls_used) ? j.api_calls_used : "–"}</td>
+            <td>${escapeHtml(j.error || (typeof j.details === "string" ? j.details : JSON.stringify(j.details || {})))}</td></tr>`).join("")
+        }</tbody></table>`
+      : '<div class="empty-state">ยังไม่มีประวัติการรัน job</div>';
   }
 
   /* ---- Backup: export / parse+validate ---- */
@@ -923,6 +1221,8 @@
   const navTabs = document.getElementById("navTabs");
   const viewStocks = document.getElementById("viewStocks");
   const viewCalculator = document.getElementById("viewCalculator");
+  const viewPortfolio = document.getElementById("viewPortfolio");
+  const viewReports = document.getElementById("viewReports");
   const toolbarWrap = document.getElementById("toolbarWrap");
   navTabs.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-tab]");
@@ -935,8 +1235,12 @@
     });
     viewStocks.classList.toggle("active", tab === "stocks");
     viewCalculator.classList.toggle("active", tab === "calculator");
+    viewPortfolio.classList.toggle("active", tab === "portfolio");
+    viewReports.classList.toggle("active", tab === "reports");
     toolbarWrap.style.display = tab === "stocks" ? "" : "none";
     if (tab === "calculator") updateCalculator();
+    if (tab === "portfolio") renderPortfolioViews();
+    if (tab === "reports") loadReportsAndJobRuns();
   });
 
   /* ============ 4. Fetch real price from EODHD ============ */
@@ -1711,8 +2015,13 @@
   window.TDF.pushAllToSupabase = pushAllToSupabase;
   window.TDF.pullFromSupabase = pullFromSupabase;
   window.TDF.dbHardReset = dbHardReset;
+  window.TDF.dbFetchDailyReports = dbFetchDailyReports;
+  window.TDF.dbFetchJobRuns = dbFetchJobRuns;
 
   /* ============ 9. Init ============ */
+  bindPortfolioEvents();
+  document.getElementById("refreshReportsBtn").addEventListener("click", loadReportsAndJobRuns);
+  document.getElementById("txDate").value = todayStr();
   updateAuthUI();
   if (supabaseDB) {
     document.getElementById("authBtn").addEventListener("click", async () => {
