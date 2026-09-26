@@ -1396,14 +1396,29 @@
 
   // รวมปันผลรายปีงบ (fiscalYear) จากรายการที่ใช้คำนวณได้ = ไม่ใช่ประมาณการ (estimated) เรียงเก่า→ใหม่
   // - งวดพิเศษ (special) ไม่รวมในยอดปี (เป็นรายการครั้งเดียว ไม่ควรกระทบ Growth/Yield)
-  // - ปีที่มีแต่ interim (ยังไม่มี final/unspecified) ถือว่ายังไม่ครบปี → ไม่นำมาคำนวณ ไม่งั้น Growth จะดูตกผิดจริง
+  // - ปีที่มีแต่ interim (ยังไม่มี final) ถือว่ายังไม่ครบปี → ไม่นำมาคำนวณ ไม่งั้น Growth จะดูตกผิดจริง
+  // - EODHD ไม่ส่ง field period มาให้จริง (ยืนยันแล้วว่าเป็น null เสมอสำหรับตลาด BK) จึงแทบทุกแถวจะเป็น
+  //   "unspecified" ตลอดไป ใช้ period อย่างเดียวจึงถือว่าทุกปีครบทันทีที่มีข้อมูลแถวแรก แม้เป็นแค่รอบแรกของปี
+  //   (เช่น interim) ก็ตาม — เปลี่ยนมาใช้เวลาเป็นตัวช่วยตัดสินแทนสำหรับกรณี unspecified:
+  //   (ก) ถ้ามีปีงบถัดไปเกิดขึ้นแล้วในประวัติ แปลว่าปีนี้ปิดไปแน่นอน หรือ
+  //   (ข) ผ่านช่วงประกาศปันผลงวดสุดท้ายตามปกติของหุ้นไทยไปแล้ว (ตั้งไว้ที่ 1 พ.ค. ของปีถัดจากปีงบนั้น)
+  //   ไม่เข้าเงื่อนไขไหนเลย → ถือว่ายังไม่ครบปี เหมือน interim ป้องกัน Growth คำนวณเพี้ยนตอนข้อมูลมาไม่ครบ
   function annualGroups(history) {
     const g = new Map();
+    const maxYear = history.reduce((m, r) => (Number.isFinite(r.fiscalYear) ? Math.max(m, r.fiscalYear) : m), -Infinity);
+    const now = new Date();
     history.forEach((r) => {
       if (r.source === "estimated" || !Number.isFinite(r.fiscalYear) || !Number.isFinite(r.dps)) return;
       const y = g.get(r.fiscalYear) || { dps: 0, complete: false, interim: false };
       if (r.period !== "special") y.dps += r.dps;
-      if (r.period === "final" || r.period === "unspecified") y.complete = true;
+      if (r.period === "final") {
+        y.complete = true;
+      } else if (r.period === "unspecified") {
+        const closedByNewerYear = r.fiscalYear < maxYear;
+        const seasonCutoff = new Date(Date.UTC(r.fiscalYear + 1, 4, 1)); // 1 พ.ค. ปีถัดไป
+        if (closedByNewerYear || now >= seasonCutoff) y.complete = true;
+        else y.interim = true;
+      }
       if (r.period === "interim") y.interim = true;
       g.set(r.fiscalYear, y);
     });
