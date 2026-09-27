@@ -385,12 +385,21 @@
     </section>
 
     <section class="card" id="transactionSection">
-      <h2 class="section-title">บันทึกการซื้อขาย <span class="section-hint">ทุกรายการจะซิงก์ขึ้นตาราง transactions และมี audit trail อัตโนมัติฝั่งฐานข้อมูล</span></h2>
+      <h2 class="section-title">บันทึกการซื้อขาย/ปันผล <span class="section-hint">ทุกรายการจะซิงก์ขึ้นตาราง transactions และมี audit trail อัตโนมัติฝั่งฐานข้อมูล</span></h2>
       <div class="btn-group">
         <select id="txTicker" class="ctrl"></select>
-        <select id="txType" class="ctrl"><option value="buy">ซื้อ</option><option value="sell">ขาย</option></select>
+        <select id="txType" class="ctrl">
+          <option value="buy">ซื้อ</option>
+          <option value="sell">ขาย</option>
+          <option value="dividend">ปันผลที่ได้รับ</option>
+          <option value="tax">ภาษีอื่น</option>
+          <option value="fee">ค่าธรรมเนียม</option>
+        </select>
         <input id="txShares" type="number" min="1" step="100" placeholder="จำนวนหุ้น" style="width:120px;">
         <input id="txPrice" type="number" min="0" step="0.01" placeholder="ราคา/หุ้น" style="width:120px;">
+        <input id="txPreTax" type="number" min="0" step="0.01" placeholder="ปันผลก่อนภาษี" style="width:140px; display:none;">
+        <input id="txTaxWithheld" type="number" min="0" step="0.01" placeholder="ภาษีหัก ณ ที่จ่าย (10%)" style="width:170px; display:none;">
+        <input id="txAmount" type="number" min="0" step="0.01" placeholder="จำนวนเงิน" style="width:120px; display:none;">
         <input id="txDate" type="date" style="width:150px;">
         <button id="addTxBtn" class="btn primary" type="button">บันทึกรายการ</button>
       </div>
@@ -892,7 +901,8 @@
   const LS_TX_KEY = "tdf_transactions_v1";
   const LS_ALERTS_KEY = "tdf_alerts_v1";
   let positionStore = loadJson(LS_POSITIONS_KEY, {});   // { ticker: { shares, avgCost, updatedAt } } — ชื่อฟิลด์ในเครื่องคงเดิม, แม็ปตอนคุยกับ DB
-  let txStore = loadJson(LS_TX_KEY, []);                // [{ id (local), dbId (uuid จริงหลังซิงก์), ticker, type, shares, price, txDate, createdAt }]
+  let txStore = loadJson(LS_TX_KEY, []);                // [{ id (local), dbId, ticker, type: buy|sell|dividend|tax|fee, shares, price, preTaxAmount, taxWithheld, amount, txDate, createdAt }]
+  const DIV_TAX_RATE = 0.10; // ภาษีหัก ณ ที่จ่ายเงินปันผลบุคคลธรรมดา (ค่าเริ่มต้น แก้ไขได้ต่อรายการ)
   let alertStore = loadJson(LS_ALERTS_KEY, []);          // [{ id (local), dbId, ticker, cond, threshold, createdAt }]
   const uid = () => (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
 
@@ -921,7 +931,8 @@
       const stockId = await dbGetStockId(tx.ticker) || (await dbUpsertStock({ ticker: tx.ticker, nameTh: tx.ticker }), await dbGetStockId(tx.ticker));
       if (!stockId) return null;
       const res = await supabaseDB.from("transactions").insert(
-        { stock_id: stockId, type: tx.type, quantity: tx.shares, price: tx.price, fee: 0, txn_date: tx.txDate }).select("id").single();
+        { stock_id: stockId, type: tx.type, quantity: tx.shares, price: tx.price, fee: 0, txn_date: tx.txDate,
+          amount: tx.amount, pre_tax_amount: tx.preTaxAmount, tax_withheld: tx.taxWithheld }).select("id").single();
       return dbOk(res, "transactions") && res.data ? res.data.id : null;
     } catch (e) { dbOk({ error: e }, "transactions"); return null; }
   }
@@ -969,22 +980,50 @@
     savePositions();
     dbDeletePosition(ticker);
   }
-  function addTransaction(ticker, type, shares, price, txDate) {
-    const tx = { id: uid(), dbId: null, ticker, type, shares, price, txDate, createdAt: new Date().toISOString() };
+  // opts: { shares, price } สำหรับ buy/sell | { preTaxAmount, taxWithheld } สำหรับ dividend | { amount } สำหรับ tax/fee
+  function addTransaction(ticker, type, opts, txDate) {
+    let shares = null, price = null, preTaxAmount = null, taxWithheld = null, amount = null;
+    if (type === "buy" || type === "sell") {
+      shares = opts.shares; price = opts.price; amount = Math.round(shares * price * 100) / 100;
+    } else if (type === "dividend") {
+      preTaxAmount = opts.preTaxAmount;
+      taxWithheld = Number.isFinite(opts.taxWithheld) ? opts.taxWithheld : Math.round(preTaxAmount * DIV_TAX_RATE * 100) / 100;
+      amount = Math.round((preTaxAmount - taxWithheld) * 100) / 100;
+    } else { // tax, fee
+      amount = opts.amount;
+    }
+    const tx = { id: uid(), dbId: null, ticker, type, shares, price, preTaxAmount, taxWithheld, amount, txDate, createdAt: new Date().toISOString() };
     txStore.push(tx);
     saveTx();
     dbInsertTransaction(tx).then((dbId) => { if (dbId) { tx.dbId = dbId; saveTx(); } });
-    // อัปเดตตำแหน่งอัตโนมัติจากรายการซื้อขาย: ซื้อ = ถัวเฉลี่ยต้นทุน, ขาย = ลดจำนวนหุ้น (ต้นทุนเฉลี่ยเดิมไม่เปลี่ยน)
-    const cur = positionStore[ticker] || { shares: 0, avgCost: 0 };
-    if (type === "buy") {
-      const newShares = cur.shares + shares;
-      const newCost = newShares > 0 ? ((cur.shares * cur.avgCost) + (shares * price)) / newShares : 0;
-      upsertPosition(ticker, newShares, newCost);
-    } else {
-      const newShares = Math.max(0, cur.shares - shares);
-      if (newShares === 0) deletePosition(ticker); else upsertPosition(ticker, newShares, cur.avgCost);
+    // อัปเดตตำแหน่งอัตโนมัติจากรายการซื้อขายเท่านั้น: ซื้อ = ถัวเฉลี่ยต้นทุน, ขาย = ลดจำนวนหุ้น (ต้นทุนเฉลี่ยเดิมไม่เปลี่ยน)
+    // dividend/tax/fee ไม่กระทบจำนวนหุ้น/ต้นทุนเฉลี่ย — เป็นแค่กระแสเงินสดที่บันทึกไว้ตรวจย้อนกลับ
+    if (type === "buy" || type === "sell") {
+      const cur = positionStore[ticker] || { shares: 0, avgCost: 0 };
+      if (type === "buy") {
+        const newShares = cur.shares + shares;
+        const newCost = newShares > 0 ? ((cur.shares * cur.avgCost) + (shares * price)) / newShares : 0;
+        upsertPosition(ticker, newShares, newCost);
+      } else {
+        const newShares = Math.max(0, cur.shares - shares);
+        if (newShares === 0) deletePosition(ticker); else upsertPosition(ticker, newShares, cur.avgCost);
+      }
     }
     return tx;
+  }
+
+  // เงินปันผลสุทธิที่ได้รับจริง (จาก transactions type=dividend) ย้อนหลัง 12 เดือน แยกตาม ticker
+  function getTrailingDividendReceived(ticker, months) {
+    const now = new Date();
+    const windowStart = new Date(now); windowStart.setMonth(windowStart.getMonth() - (months || 12));
+    return txStore
+      .filter((t) => t.ticker === ticker && t.type === "dividend" && t.txDate)
+      .filter((t) => { const d = new Date(t.txDate); return d > windowStart && d <= now; })
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  }
+  function getTotalDividendReceived(ticker) {
+    return txStore.filter((t) => t.ticker === ticker && t.type === "dividend")
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   }
   function deleteTransaction(txId) {
     const tx = txStore.find((t) => t.id === txId);
@@ -1017,7 +1056,7 @@
     document.getElementById("portfolioWarn").style.display = isDbReady() ? "none" : "block";
     const rows = Object.entries(positionStore);
     if (!rows.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีตำแหน่งที่บันทึกไว้</div>'; return; }
-    let totalCost = 0, totalValue = 0;
+    let totalCost = 0, totalValue = 0, totalDivTrailing = 0;
     const trs = rows.map(([ticker, pos]) => {
       const stockObj = getAllStocks().find((s) => s.ticker === ticker) || { ticker, fallbackPrice: null };
       const price = getCurrentPrice(stockObj);
@@ -1027,27 +1066,47 @@
       totalCost += cost; if (value != null) totalValue += value;
       const pnl = value != null ? value - cost : null;
       const pnlPct = value != null && cost > 0 ? (pnl / cost) * 100 : null;
+      // ปันผลที่ได้รับจริง (จาก transactions type=dividend) — TTM = yield on cost บนฐานเงินลงทุนจริง
+      const divTrailing = getTrailingDividendReceived(ticker, 12);
+      totalDivTrailing += divTrailing;
+      const yieldOnCost = cost > 0 ? (divTrailing / cost) * 100 : null;
+      // current yield = DPS ล่าสุดของหุ้นนี้ (จากตาราง dividends) / ราคาปัจจุบัน — อิงตัวหลักทรัพย์ ไม่ใช่ต้นทุนของผู้ใช้
+      const dpsLatest = computeLatestDividend(getHistory(ticker)).value;
+      const currentYield = computeYieldPct(dpsLatest, curPrice);
       return `<tr><td>${escapeHtml(ticker)}</td><td class="num">${fmtNum(pos.shares)}</td><td class="num">${fmtNum(pos.avgCost, 2)}</td>
         <td class="num">${curPrice != null ? fmtNum(curPrice, 2) : "–"}</td><td class="num">${fmtNum(cost, 2)}</td>
         <td class="num">${value != null ? fmtNum(value, 2) : "–"}</td>
         <td class="num" style="color:${pnl == null ? '' : pnl >= 0 ? 'var(--teal)' : 'var(--red)'}">${pnl != null ? fmtNum(pnl, 2) + " (" + fmtNum(pnlPct, 1) + "%)" : "–"}</td>
+        <td class="num">${fmtNum(divTrailing, 2)}</td>
+        <td class="num">${yieldOnCost != null ? pct(yieldOnCost) : "–"}</td>
+        <td class="num">${currentYield != null ? pct(currentYield) : "–"}</td>
         <td><button type="button" class="btn danger" data-del-pos="${escapeHtml(ticker)}">ลบ</button></td></tr>`;
     }).join("");
-    el.innerHTML = `<table class="history-table"><thead><tr><th>Ticker</th><th>จำนวนหุ้น</th><th>ต้นทุนเฉลี่ย</th><th>ราคาล่าสุด</th><th>ต้นทุนรวม</th><th>มูลค่าปัจจุบัน</th><th>กำไร/ขาดทุน</th><th></th></tr></thead>
-      <tbody>${trs}</tbody><tfoot><tr><td colspan="4"><strong>รวม</strong></td><td class="num"><strong>${fmtNum(totalCost, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue - totalCost, 2)}</strong></td><td></td></tr></tfoot></table>`;
+    const totalYoc = totalCost > 0 ? (totalDivTrailing / totalCost) * 100 : null;
+    el.innerHTML = `<table class="history-table"><thead><tr><th>Ticker</th><th>จำนวนหุ้น</th><th>ต้นทุนเฉลี่ย</th><th>ราคาล่าสุด</th><th>ต้นทุนรวม</th><th>มูลค่าปัจจุบัน</th><th>กำไร/ขาดทุน</th><th>ปันผลรับ 12 ด.</th><th>Yield on Cost</th><th>Current Yield</th><th></th></tr></thead>
+      <tbody>${trs}</tbody><tfoot><tr><td colspan="4"><strong>รวม</strong></td><td class="num"><strong>${fmtNum(totalCost, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue, 2)}</strong></td><td class="num"><strong>${fmtNum(totalValue - totalCost, 2)}</strong></td>
+      <td class="num"><strong>${fmtNum(totalDivTrailing, 2)}</strong></td><td class="num"><strong>${totalYoc != null ? pct(totalYoc) : "–"}</strong></td><td></td><td></td></tr></tfoot></table>
+      <div class="section-hint" style="margin-top:6px;">Yield on Cost = ปันผลสุทธิที่ได้รับจริงย้อนหลัง 12 เดือน ÷ ต้นทุนรวม (จากรายการ "ปันผลที่ได้รับ" ที่บันทึกไว้) · Current Yield = DPS ปีงบล่าสุดของหุ้น ÷ ราคาปัจจุบัน</div>`;
     el.querySelectorAll("[data-del-pos]").forEach((b) => b.addEventListener("click", () => {
       if (confirm(dbWarn() + `ลบตำแหน่ง ${b.getAttribute("data-del-pos")} หรือไม่?`)) { deletePosition(b.getAttribute("data-del-pos")); renderPortfolioTable(); }
     }));
   }
+  const TX_TYPE_LABEL = { buy: "ซื้อ", sell: "ขาย", dividend: "ปันผล", tax: "ภาษี", fee: "ค่าธรรมเนียม" };
   function renderTxTable() {
     const el = document.getElementById("txTable");
     if (!el) return;
-    if (!txStore.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีรายการซื้อขาย</div>'; return; }
+    if (!txStore.length) { el.innerHTML = '<div class="empty-state">ยังไม่มีรายการ</div>'; return; }
     const rows = [...txStore].sort((a, b) => (b.txDate || "").localeCompare(a.txDate || ""));
-    el.innerHTML = `<table class="history-table"><thead><tr><th>วันที่</th><th>Ticker</th><th>ประเภท</th><th>จำนวนหุ้น</th><th>ราคา</th><th>มูลค่า</th><th></th></tr></thead>
-      <tbody>${rows.map((t) => `<tr><td>${escapeHtml(t.txDate || "–")}</td><td>${escapeHtml(t.ticker)}</td><td>${t.type === "buy" ? "ซื้อ" : "ขาย"}</td>
-        <td class="num">${fmtNum(t.shares)}</td><td class="num">${fmtNum(t.price, 2)}</td><td class="num">${fmtNum(t.shares * t.price, 2)}</td>
-        <td><button type="button" class="btn danger" data-del-tx="${escapeHtml(t.id)}">ลบ</button></td></tr>`).join("")}</tbody></table>`;
+    el.innerHTML = `<table class="history-table"><thead><tr><th>วันที่</th><th>Ticker</th><th>ประเภท</th><th>จำนวนหุ้น</th><th>ราคา</th><th>ก่อนภาษี</th><th>ภาษีหัก</th><th>มูลค่าสุทธิ</th><th></th></tr></thead>
+      <tbody>${rows.map((t) => {
+        const isTrade = t.type === "buy" || t.type === "sell";
+        return `<tr><td>${escapeHtml(t.txDate || "–")}</td><td>${escapeHtml(t.ticker)}</td><td>${TX_TYPE_LABEL[t.type] || t.type}</td>
+        <td class="num">${isTrade ? fmtNum(t.shares) : "–"}</td><td class="num">${isTrade ? fmtNum(t.price, 2) : "–"}</td>
+        <td class="num">${t.type === "dividend" ? fmtNum(t.preTaxAmount, 2) : "–"}</td>
+        <td class="num">${t.type === "dividend" ? fmtNum(t.taxWithheld, 2) : "–"}</td>
+        <td class="num" style="color:${t.type === "dividend" ? "var(--teal)" : t.type === "sell" ? "var(--teal)" : (t.type === "tax" || t.type === "fee") ? "var(--red)" : "inherit"}">${fmtNum(t.amount, 2)}</td>
+        <td><button type="button" class="btn danger" data-del-tx="${escapeHtml(t.id)}">ลบ</button></td></tr>`;
+      }).join("")}</tbody></table>`;
     el.querySelectorAll("[data-del-tx]").forEach((b) => b.addEventListener("click", () => {
       if (confirm("ลบรายการนี้หรือไม่? (จะไม่ปรับยอดตำแหน่งย้อนหลังให้อัตโนมัติ)")) { deleteTransaction(b.getAttribute("data-del-tx")); renderTxTable(); }
     }));
@@ -1084,16 +1143,52 @@
       upsertPosition(ticker, shares, cost); renderPortfolioTable();
       document.getElementById("posShares").value = ""; document.getElementById("posCost").value = "";
     });
+    function updateTxFormFields() {
+      const type = document.getElementById("txType").value;
+      const showTrade = type === "buy" || type === "sell";
+      const showDividend = type === "dividend";
+      const showAmount = type === "tax" || type === "fee";
+      document.getElementById("txShares").style.display = showTrade ? "" : "none";
+      document.getElementById("txPrice").style.display = showTrade ? "" : "none";
+      document.getElementById("txPreTax").style.display = showDividend ? "" : "none";
+      document.getElementById("txTaxWithheld").style.display = showDividend ? "" : "none";
+      document.getElementById("txAmount").style.display = showAmount ? "" : "none";
+    }
+    document.getElementById("txType").addEventListener("change", updateTxFormFields);
+    updateTxFormFields();
+    // ปันผลก่อนภาษี → เติมภาษีหัก ณ ที่จ่าย 10% ให้อัตโนมัติ (แก้ไขเองได้)
+    document.getElementById("txPreTax").addEventListener("input", (e) => {
+      const v = parseFloat(e.target.value);
+      const twEl = document.getElementById("txTaxWithheld");
+      if (Number.isFinite(v) && v >= 0 && !twEl.dataset.userEdited) twEl.value = (Math.round(v * DIV_TAX_RATE * 100) / 100).toFixed(2);
+    });
+    document.getElementById("txTaxWithheld").addEventListener("input", (e) => { e.target.dataset.userEdited = "1"; });
     document.getElementById("addTxBtn").addEventListener("click", () => {
       const ticker = document.getElementById("txTicker").value;
       const type = document.getElementById("txType").value;
-      const shares = parseFloat(document.getElementById("txShares").value);
-      const price = parseFloat(document.getElementById("txPrice").value);
       const txDate = document.getElementById("txDate").value || todayStr();
-      if (!ticker || !Number.isFinite(shares) || shares <= 0 || !Number.isFinite(price) || price < 0) { alert("กรอกจำนวนหุ้นและราคาให้ถูกต้อง"); return; }
-      addTransaction(ticker, type, shares, price, txDate);
+      if (!ticker) { alert("เลือก Ticker ก่อน"); return; }
+      let opts;
+      if (type === "buy" || type === "sell") {
+        const shares = parseFloat(document.getElementById("txShares").value);
+        const price = parseFloat(document.getElementById("txPrice").value);
+        if (!Number.isFinite(shares) || shares <= 0 || !Number.isFinite(price) || price < 0) { alert("กรอกจำนวนหุ้นและราคาให้ถูกต้อง"); return; }
+        opts = { shares, price };
+      } else if (type === "dividend") {
+        const preTaxAmount = parseFloat(document.getElementById("txPreTax").value);
+        const twRaw = document.getElementById("txTaxWithheld").value;
+        const taxWithheld = twRaw === "" ? null : parseFloat(twRaw);
+        if (!Number.isFinite(preTaxAmount) || preTaxAmount < 0) { alert("กรอกยอดปันผลก่อนภาษีให้ถูกต้อง"); return; }
+        opts = { preTaxAmount, taxWithheld };
+      } else { // tax, fee
+        const amount = parseFloat(document.getElementById("txAmount").value);
+        if (!Number.isFinite(amount) || amount < 0) { alert("กรอกจำนวนเงินให้ถูกต้อง"); return; }
+        opts = { amount };
+      }
+      addTransaction(ticker, type, opts, txDate);
       renderTxTable(); renderPortfolioTable();
-      document.getElementById("txShares").value = ""; document.getElementById("txPrice").value = "";
+      ["txShares", "txPrice", "txPreTax", "txAmount"].forEach((id) => { document.getElementById(id).value = ""; });
+      const twEl = document.getElementById("txTaxWithheld"); twEl.value = ""; delete twEl.dataset.userEdited;
     });
     document.getElementById("addAlertBtn").addEventListener("click", () => {
       const ticker = document.getElementById("alertTicker").value;
@@ -2068,7 +2163,8 @@
 
   // เปิดให้ชุดทดสอบ (เปิดหน้าด้วย ?test) เรียกใช้ฟังก์ชันล้วนได้ — ไม่มีฟังก์ชันไหนในนี้แก้ข้อมูลจริงของผู้ใช้
   window.TDF = { APP_ID, SCHEMA_VERSION, TAX_RATE, RAW_STOCKS, calcPosition, computeYieldPct, computeAnnualSeries, computeGrowth, computeGrowthStreak,
-    computeLatestDividend, computeTTMDividend, incompleteYears, rowKind, rowKeys, PERIODS, validateDividendRow, computeAvgDividend, getCurrentPrice, priceInfoFrom, setManualPrice, divRowStatus, assessData, passesScreen, SOURCES, STATUSES, buildBackup, parseBackup, loadAllState, cleanSymbolCache };
+    computeLatestDividend, computeTTMDividend, incompleteYears, rowKind, rowKeys, PERIODS, validateDividendRow, computeAvgDividend, getCurrentPrice, priceInfoFrom, setManualPrice, divRowStatus, assessData, passesScreen, SOURCES, STATUSES, buildBackup, parseBackup, loadAllState, cleanSymbolCache,
+    addTransaction, getTrailingDividendReceived, getTotalDividendReceived, DIV_TAX_RATE };
   // เปิดฟังก์ชันซิงก์กับ Supabase ให้เรียกจาก browser console ได้ (เช่น TDF.pushAllToSupabase() ตอน migrate ข้อมูลเก่าครั้งแรก)
   window.TDF.pushAllToSupabase = pushAllToSupabase;
   window.TDF.pullFromSupabase = pullFromSupabase;
