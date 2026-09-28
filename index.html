@@ -485,7 +485,6 @@
     { ticker:"ADVANC", nameTh:"แอดวานซ์ อินโฟร์ เซอร์วิส", market:"SET", sector:"ICT",                fallbackPrice:215.00 },
     { ticker:"CPALL",  nameTh:"ซีพี ออลล์",               market:"SET", sector:"พาณิชย์",            fallbackPrice:58.25 },
     { ticker:"BBL",    nameTh:"ธนาคารกรุงเทพ",            market:"SET", sector:"ธนาคาร",             fallbackPrice:150.50 },
-    { ticker:"INTUCH", nameTh:"อินทัช โฮลดิ้งส์",          market:"SET", sector:"ICT (โฮลดิ้ง)",       fallbackPrice:78.00 },
     { ticker:"TOP",    nameTh:"ไทยออยล์",                 market:"SET", sector:"พลังงาน-โรงกลั่น",    fallbackPrice:38.00 },
     { ticker:"PTTEP",  nameTh:"ปตท.สำรวจและผลิตปิโตรเลียม", market:"SET", sector:"พลังงาน-สำรวจ",     fallbackPrice:135.00 },
     { ticker:"KTB",    nameTh:"ธนาคารกรุงไทย",            market:"SET", sector:"ธนาคาร",             fallbackPrice:19.20 },
@@ -542,8 +541,11 @@
     if (!Number.isFinite(row.dps)) errors.dps = "เงินปันผลต้องเป็นตัวเลข";
     else if (row.dps < 0) errors.dps = "เงินปันผลต้องไม่ติดลบ";
     if (row.currency !== "THB") errors.currency = "รองรับเฉพาะสกุลเงิน THB (ยังไม่มีการแปลงสกุลเงิน)";
-    const payErr = validateDateField(row.paymentDate);
-    if (payErr) errors.paymentDate = payErr;
+    // EODHD (ตลาด BK) ไม่ส่งวันจ่ายมาเลย — ยอมให้วันจ่ายว่างได้ถ้ามีวัน XD เป็นหลักอ้างอิงแทน (ไม่งั้นแถวจริงทั้งหมดถูกทิ้งแล้วแอปเติม SEED แทน)
+    if (!(row.paymentDate == null && row.xdDate != null)) {
+      const payErr = validateDateField(row.paymentDate);
+      if (payErr) errors.paymentDate = payErr;
+    }
     ["announceDate", "xdDate", "recordDate"].forEach((f) => { if (row[f] != null) { const e = validateDateField(row[f]); if (e) errors[f] = e; } });
     if (Object.keys(errors).length === 0) { // ลำดับเวลา: ประกาศ ≤ XD ≤ ปิดสมุด ≤ จ่าย (ช่องที่เว้นว่างข้ามไป)
       const seq = DATE_ORDER.filter(([f]) => row[f] != null);
@@ -557,8 +559,9 @@
   }
 
   // กุญแจกันซ้ำ: ticker + งวด + วันจ่าย  หรือ  ticker + รหัสประกาศ (ถ้ามี)
-  const rowKeys = (r) => [`p|${r.ticker}|${r.period}|${String(r.paymentDate).trim()}`].concat(r.announcementId ? [`id|${r.ticker}|${String(r.announcementId).trim()}`] : []);
-  const cmpRow = (a, b) => a.fiscalYear - b.fiscalYear || (a.paymentDate < b.paymentDate ? -1 : a.paymentDate > b.paymentDate ? 1 : 0);
+  const rowKeys = (r) => [(r.paymentDate == null && r.xdDate != null ? `x|${r.ticker}|${r.period}|${String(r.xdDate).trim()}|${r.dps}` : `p|${r.ticker}|${r.period}|${String(r.paymentDate).trim()}`)].concat(r.announcementId ? [`id|${r.ticker}|${String(r.announcementId).trim()}`] : []);
+  const rowDate = (r) => r.paymentDate || r.xdDate || "";
+  const cmpRow = (a, b) => a.fiscalYear - b.fiscalYear || (rowDate(a) < rowDate(b) ? -1 : rowDate(a) > rowDate(b) ? 1 : 0);
   // ชนิดข้อมูล: actual = official/market-data/user | estimated = ประมาณการ | sample = seed (ข้อมูลตัวอย่าง)
   const rowKind = (r) => (r.source === "seed" ? "sample" : r.source === "estimated" ? "estimated" : "actual");
   const KIND_LABEL = { actual: "ข้อมูลจริง (ACTUAL)", estimated: "ประมาณการ (ESTIMATED)", sample: "ตัวอย่าง (SAMPLE)" };
@@ -596,7 +599,7 @@
       source: "seed", sourceUrl: null, fetchedAt: new Date().toISOString(), verified: false
     }));
   }
-  const SEED_BASE_DPS = { PTT:1.9, AOT:0.55, KBANK:6.5, SCB:8.36, ADVANC:7.3, CPALL:0.9, BBL:6.5, INTUCH:5.1, TOP:2.2, PTTEP:7.75, KTB:1.06, SCC:8.0, BDMS:0.36, CPN:1.15, LH:0.6, TISCO:6.85, BCP:1.6, JMART:0.3 };
+  const SEED_BASE_DPS = { PTT:1.9, AOT:0.55, KBANK:6.5, SCB:8.36, ADVANC:7.3, CPALL:0.9, BBL:6.5, TOP:2.2, PTTEP:7.75, KTB:1.06, SCC:8.0, BDMS:0.36, CPN:1.15, LH:0.6, TISCO:6.85, BCP:1.6, JMART:0.3 };
 
   /* ============ 2. Persistent state (dividends / prices / key) ============ */
   const APP_ID = "thai-dividend-finder";
@@ -750,6 +753,7 @@
   let supaUser = null; // ผู้ใช้ที่ล็อกอินอยู่ตอนนี้ (null = ยังไม่ล็อกอิน หรือยังไม่ได้ตั้งค่า Supabase)
   const LS_DIRTY_KEY = "tdf_db_dirty"; // มีข้อมูลในเครื่องที่ยังไม่ขึ้นฐานข้อมูล
   let syncErrors = [], pulling = false;
+  let hasPulledOnce = false; // true เมื่อดึงข้อมูลจาก DB สำเร็จแล้วในเซสชันนี้ — ก่อนหน้านั้นห้าม replace ปันผลทั้งชุดขึ้น DB
   function setDirty(b) { try { b ? localStorage.setItem(LS_DIRTY_KEY, "1") : localStorage.removeItem(LS_DIRTY_KEY); } catch (e) {} }
   function isDirty() { try { return localStorage.getItem(LS_DIRTY_KEY) === "1"; } catch (e) { return false; } }
   function showSync(msg, bad) { const el = document.getElementById("syncStatus"); if (el) { el.textContent = msg; el.style.color = bad ? "#c0392b" : ""; } }
@@ -806,6 +810,9 @@
   async function dbReplaceDividendHistory(ticker, rows) {
     // เรียก RPC replace_dividends: ลบ+ใส่ใหม่ใน transaction เดียว — ล้มเหลวแล้ว rollback ข้อมูลเดิมใน DB ไม่หาย
     if (!isDbReady()) return false;
+    if (!hasPulledOnce) { // กันบั๊กเดิม: ข้อมูลในเบราว์เซอร์ยังไม่ซิงก์จาก DB แล้ว replace จะลบข้อมูลจริงทั้งชุด
+      showSync("⚠ ยังดึงข้อมูลจากฐานข้อมูลไม่เสร็จ — ยังไม่บันทึกปันผลขึ้นฐานข้อมูล (รอซิงก์ครบแล้วลองใหม่)", true); setDirty(true); return false;
+    }
     try {
       const stockId = await dbGetStockId(ticker);
       if (!stockId) return false;
@@ -852,6 +859,7 @@
       ]);
       if (!dbOk(s, "stocks") || !dbOk(p, "prices") || !dbOk(d, "dividends")) return false;
       const stockRows = s.data, priceRows = p.data, divRows = d.data;
+      hasPulledOnce = true; // ดึงจาก DB สำเร็จแล้ว — หลังจากนี้ state ในเครื่องเป็น/จะถูกทำให้ตรงกับ DB
       if (!stockRows || !stockRows.length) return await pushAllToSupabase(); // DB ว่าง = migrate ข้อมูลในเครื่องขึ้นเป็นชุดแรก
       if (isDirty()) {
         if (confirm("เครื่องนี้มีข้อมูลที่ยังไม่ได้อัปโหลดขึ้นฐานข้อมูล\n\n[ตกลง] = อัปโหลดข้อมูลในเครื่องขึ้นไปทับฐานข้อมูล\n[ยกเลิก] = ดึงจากฐานข้อมูลมาทับข้อมูลในเครื่องนี้")) return await pushAllToSupabase();
@@ -1574,14 +1582,14 @@
   // Dividend ย้อนหลัง 12 เดือน (TTM): รวมทุกรอบจ่ายที่ "วันจ่าย" อยู่ภายใน 12 เดือนล่าสุดนับจากวันนี้
   // ทำให้หุ้นที่จ่ายหลายรอบ/ปี (ระหว่างกาล+ประจำปี) ถูกรวมยอดถูกต้อง แทนที่จะนับแค่แถวเดียว
   function computeTTMDividend(history) {
-    const validRows = history.filter((r) => r.source !== "estimated" && ISO_DATE_RE.test(r.paymentDate) && Number.isFinite(r.dps) && r.dps >= 0);
+    const validRows = history.filter((r) => r.source !== "estimated" && ISO_DATE_RE.test(rowDate(r)) && Number.isFinite(r.dps) && r.dps >= 0);
     if (!validRows.length) return { value: null, count: 0, reason: "ไม่มีข้อมูล \u201cวันจ่ายปันผล\u201d ที่ถูกต้องสำหรับหุ้นนี้ จึงคำนวณ TTM ไม่ได้" };
     const now = new Date();
     now.setUTCHours(0, 0, 0, 0);
     const windowStart = new Date(now);
     windowStart.setUTCFullYear(windowStart.getUTCFullYear() - 1);
     const inWindow = validRows.filter((r) => {
-      const d = new Date(r.paymentDate + "T00:00:00Z");
+      const d = new Date(rowDate(r) + "T00:00:00Z"); // ไม่มีวันจ่าย (EODHD) ใช้วัน XD แทน
       return d > windowStart && d <= now;
     });
     if (!inWindow.length) return { value: null, count: 0, reason: "ไม่มีรอบจ่ายปันผลที่อยู่ภายใน 12 เดือนล่าสุด (ตรวจสอบวันจ่ายในตารางด้านล่าง)" };
